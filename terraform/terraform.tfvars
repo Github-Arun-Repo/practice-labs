@@ -28,6 +28,5 @@ private_data_subnet_cidrs = [
 
 common_tags = {
   environment = "dev"
-  owner       = "learning"
   project     = "micah-vpc-lab"
 }
