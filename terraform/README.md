@@ -21,18 +21,13 @@ This project is configured for:
 Backend block is defined in versions.tf as partial config:
 - backend "s3" {}
 
-Provide real backend settings via backend.hcl:
-1. Copy backend.hcl.example to backend.hcl
-2. Update bucket and dynamodb_table names
-
-Example backend settings are in backend.hcl.example.
+Use backend.hcl for actual backend settings.
+Sample naming and structure are also shown in backend.hcl.example.
 
 ## Sample Input Values
 
-Sample values are provided in terraform.tfvars.example.
-
-1. Copy terraform.tfvars.example to terraform.tfvars
-2. Adjust CIDRs, tags, and naming if needed
+Use terraform.tfvars for actual input values.
+Sample values are also kept in terraform.tfvars.example.
 
 ## Usage
 

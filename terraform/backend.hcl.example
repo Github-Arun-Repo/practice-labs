@@ -1,5 +1,5 @@
-bucket         = "replace-with-your-tfstate-bucket"
-key            = "networking/ireland-vpc/terraform.tfstate"
+bucket         = "euw1-zelda-link-tfstate-20260704"
+key            = "networking/swag-ireland-vpc/terraform.tfstate"
 region         = "eu-west-1"
-dynamodb_table = "replace-with-your-terraform-lock-table"
+dynamodb_table = "kratos-atreus-terraform-locks"
 encrypt        = true

@@ -1,5 +1,5 @@
 aws_region  = "eu-west-1"
-name_prefix = "swag-ireland-lab"
+name_prefix = "micah-ireland-lab"
 vpc_cidr    = "10.40.0.0/16"
 
 availability_zones = [
@@ -29,5 +29,5 @@ private_data_subnet_cidrs = [
 common_tags = {
   environment = "dev"
   owner       = "learning"
-  project     = "swag-vpc-lab"
+  project     = "micah-vpc-lab"
 }
