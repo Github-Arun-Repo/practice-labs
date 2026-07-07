@@ -34,7 +34,7 @@ argocd-practise/
 
 ---
 
-## 0. PRE-FLIGHT (run 10 min before, not live)
+## 0. PRE-FLIGHT
 
 ```bash
 # local clone current?
@@ -103,6 +103,33 @@ argocd app get whoami-demo
 curl -s http://localhost:30096 | head -15
 ```
 👉 `whoami-demo` shows each request's pod/hostname — handy to show load-balancing across its 2 replicas.
+
+## 1.2A — One more app using ArgoCD CLI (imperative)
+
+**Say:** "Let me create a second app entirely from `argocd` CLI so you can compare imperative vs declarative styles side-by-side."
+
+```bash
+argocd app create httpd-demo \
+  --repo https://github.com/Github-Arun-Repo/practice-labs.git \
+  --path argocd-practise/cli-demo/k8s/httpd-demo \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace httpd-demo \
+  --sync-option CreateNamespace=true \
+  --sync-policy manual
+
+argocd app get httpd-demo
+argocd app sync httpd-demo
+kubectl get all -n httpd-demo
+```
+
+👉 This app is now fully managed by Argo CD even though no Application YAML was applied from Git.
+
+Optional check (ClusterIP app):
+
+```bash
+kubectl port-forward -n httpd-demo svc/httpd-demo 8081:80
+curl -s http://localhost:8081 | head -20
+```
 
 ## 1.3 — Inspect: get, diff, manifests, resource tree, raw CR
 
