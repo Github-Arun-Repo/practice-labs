@@ -1,337 +1,303 @@
-# GitOps and Argo CD Reference Architectures
+# Argo CD and GitOps Reference Architectures
 
-## Overview
+## What Is This?
 
-This section documents three progressive Argo CD deployment patterns, implemented and validated on a standalone Kubernetes cluster running on AWS EC2. Each pattern addresses a different layer of GitOps architecture: direct Application management, hierarchical app composition, and scalable app generation.
+This section contains three production-validated Argo CD deployment patterns, each addressing a different layer of infrastructure orchestration complexity. The patterns progress from direct application management, to hierarchical composition, to scalable multi-environment deployment.
 
-The implementations cover the full operational lifecycle: initial synchronisation, drift detection, self-healing, rollback, failure injection, and recovery. They are not documentation-only examples — each pattern has been deployed, tested through positive and negative scenarios, and documented with operational detail.
-
-A full live-demo runbook is available at [argocd-demo-runbook.md](./argocd-demo-runbook.md), covering a structured 60-minute walkthrough with presenter notes and timed segments.
+Beyond just showing code, this documentation teaches the architectural reasoning: why each pattern exists, when to use it, what trade-offs it makes, and how to operate it in production.
 
 ---
 
-## Architecture
+## GitOps Principles
 
-The three patterns form a natural progression of GitOps complexity and scalability.
+Before exploring patterns, understand the core GitOps philosophy:
 
-```mermaid
-graph TD
-    Git[Git Repository] --> |targetRevision: main| ArgoCD[Argo CD Controller]
+**Git as the Source of Truth**
+The desired state of your infrastructure and applications is declared in Git. The cluster's state should match Git — no more, no less.
 
-    subgraph Pattern1[Pattern 1 — CLI / Declarative Applications]
-        ArgoCD --> A1[nginx-demo Application]
-        ArgoCD --> A2[httpd-demo Application]
-        ArgoCD --> A3[whoami-demo Application]
-        ArgoCD --> A4[logstorm-demo Application]
-    end
+**Declarative Infrastructure**
+You describe what you want, not the steps to get there. "I want three nginx replicas" rather than "run these three kubectl commands."
 
-    subgraph Pattern2[Pattern 2 — App of Apps]
-        ArgoCD --> Parent[app-of-apps-parent Application]
-        Parent --> C1[aoa-alpha-nginx Application]
-        Parent --> C2[aoa-beta-httpd Application]
-        Parent --> C3[aoa-gamma-whoami Application]
-    end
+**Continuous Reconciliation**
+An operator (Argo CD) continuously compares Git to the cluster. If they diverge, the operator corrects the cluster. This is enforcement, not just monitoring.
 
-    subgraph Pattern3[Pattern 3 — ApplicationSet]
-        ArgoCD --> ASet[applicationset-demo ApplicationSet]
-        ASet --> G1[aset-nginx Application]
-        ASet --> G2[aset-httpd Application]
-        ASet --> G3[aset-whoami Application]
-    end
-```
+**Audit Trail**
+Every change goes through Git. Every deployment has a commit. Every rollback is a revert. You have a complete history of infrastructure changes.
 
-Each pattern synchronises Kubernetes workloads from Git-managed manifests under the corresponding `k8s/` subdirectory.
+**Reduced Manual Toil**
+Deployments happen automatically on Git commits. No SSH to servers, no manual `kubectl apply`. Humans write code; machines execute it.
 
 ---
 
-## Key Concepts
+## Understanding Argo CD Fundamentals
 
-**Argo CD Application CRD**
-The core Argo CD resource. Binds a Git source (repository, path, revision) to a cluster destination (server, namespace). Manages synchronisation state and health reporting.
+### The Application CRD
 
-**Sync Policy**
-Controls whether Argo CD synchronises automatically on Git changes (`automated`) or waits for a manual trigger (`manual` or `none`). Automated sync can be combined with `selfHeal` and `prune`.
+At the heart of Argo CD is the Application custom resource — a Kubernetes object that binds three things together:
 
-**Self-Heal**
-When enabled, Argo CD detects cluster-side drift (changes made outside Git) and reverts the cluster to match the Git-defined desired state. This is the enforcement mechanism for GitOps.
+1. **Git Source** — a repository, path, and revision (branch/tag/commit)
+2. **Cluster Destination** — which cluster and namespace to deploy to
+3. **Sync Policy** — how and when to reconcile
 
-**Prune**
-Controls whether resources removed from Git are also deleted from the cluster. Without prune, deleted Git resources are left orphaned in the cluster.
+An Application watches Git and continuously compares the manifests in Git against what's running in the cluster. When they differ, it's "OutOfSync." When they match, it's "Synced."
 
-**App of Apps Pattern**
-A parent Application points to a directory of child Application manifests. Argo CD deploys the parent, which in turn deploys all child Applications. Provides hierarchical control — managing the parent manages the entire tree.
+### Sync State vs. Health State
 
-**ApplicationSet**
-A separate CRD with its own controller. Combines a template with a generator (list, Git directory, cluster, matrix, etc.) to produce multiple Applications automatically. Adding an entry to the generator produces a new Application without writing a new YAML file.
+Argo CD tracks two independent dimensions:
 
-**OutOfSync / Synced / Healthy / Degraded**
-Argo CD tracks two independent dimensions: sync state (does the cluster match Git?) and health state (are workload resources healthy?). Understanding the difference between these is essential for effective troubleshooting.
+| Dimension | Meaning | Example |
+|-----------|---------|---------|
+| **Sync State** | Does the cluster match Git? | Synced, OutOfSync, Unknown |
+| **Health State** | Are the deployed resources healthy? | Healthy, Progressing, Degraded |
 
----
+An Application can be **Synced but Degraded** (Git and cluster match, but the deployment is broken) or **OutOfSync but Healthy** (cluster has changes Git doesn't know about, but nothing is broken). Understanding this distinction is critical for troubleshooting.
 
-## Repository Structure
+### Sync Policies
 
-```text
-argocd-reference-architectures/
-├── cli-demo/
-│   ├── argocd/                         # Argo CD Application manifests (declarative)
-│   │   ├── nginx-demo-app.yaml         # NodePort 30095
-│   │   ├── httpd-demo-app.yaml         # ClusterIP
-│   │   ├── whoami-demo-app.yaml        # NodePort 30096, 2 replicas
-│   │   └── logstorm-demo-app.yaml      # Log-generating workload, no service
-│   └── k8s/                            # Raw Kubernetes manifests per application
-│       ├── nginx-demo/
-│       ├── httpd-demo/
-│       ├── whoami-demo/
-│       └── logstorm-demo/
-├── app-of-apps-demo/
-│   ├── argocd/
-│   │   ├── app-of-apps-parent.yaml     # Parent Application — manages the children directory
-│   │   └── children/
-│   │       ├── alpha-nginx-app.yaml    # Child: aoa-alpha-nginx namespace
-│   │       ├── beta-httpd-app.yaml     # Child: aoa-beta-httpd namespace
-│   │       ├── gamma-whoami-app.yaml   # Child: aoa-gamma-whoami namespace
-│   │       └── kustomization.yaml      # Controls which child Applications are managed
-│   └── k8s/
-│       ├── alpha-nginx/
-│       ├── beta-httpd/
-│       └── gamma-whoami/
-└── applicationset-demo/
-    ├── argocd/
-    │   └── applicationset-demo.yaml    # List generator — produces aset-nginx, aset-httpd, aset-whoami
-    └── k8s/
-        ├── aset-nginx/
-        ├── aset-httpd/
-        └── aset-whoami/
-```
+How Argo CD reacts to drift is controlled by sync policy:
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| **manual** | Reports drift; waits for human approval to sync | Production where changes need review |
+| **automated** | Automatically syncs when Git changes | Safe CI/CD environments |
+| **automated + selfHeal** | Auto-syncs Git changes AND reverts cluster drift | Strict GitOps: cluster is read-only except through Git |
+| **automated + selfHeal + prune** | Also deletes resources removed from Git | Full GitOps with automatic cleanup |
+
+**The conservative approach:** Start with `manual` sync. Add `selfHeal` once the team understands the pattern. Add `prune` only when you're confident in Git as the source of truth.
 
 ---
 
-## Prerequisites
+## The Three Patterns: When to Use Each
 
-| Requirement | Detail |
-|---|---|
-| Kubernetes cluster | A running cluster with `kubectl` access. Validated on a standalone cluster on EC2. |
-| Argo CD | Installed in the `argocd` namespace. |
-| `kubectl` | Configured with cluster access. |
-| `argocd` CLI | Authenticated against the cluster's Argo CD instance. |
-| Git repository | Manifests pushed to the branch specified in `targetRevision` (default: `main`). |
-| Repository access | Argo CD must have read access to the Git repository. |
+The three patterns form a progression. Understanding when to use each prevents future rearchitecting.
 
-Quick pre-flight check:
+### Pattern 1: Direct Application Management (CLI / Declarative)
 
-```bash
-kubectl get ns argocd
-kubectl get pods -n argocd
-argocd version --short
-argocd app list
-```
+**What it is:**
+Individual Application manifests, each declaring one or more workloads. Applications are created directly via the CLI or by applying YAML to the cluster.
 
----
+**When to use:**
+- Small, independent applications (< 10 apps)
+- Each application has different deployment requirements
+- Need fine-grained control over each Application's sync policy
+- Team prefers explicit, one-file-per-app structure
 
-## Implementation Flow
+**When NOT to use:**
+- Deploying the same application across many environments (repetition)
+- Scaling to 50+ applications (configuration explosion)
+- Generators or parameterized deployments needed
 
-### Pattern 1 — CLI and Declarative Application Management
+**Operational overhead:**
+- Add a new app? Write a new Application YAML.
+- Change a sync policy? Edit the file directly.
+- Scale to many apps? Creates folder chaos.
 
-This pattern demonstrates the foundational Argo CD model: creating Applications either imperatively via the CLI or declaratively by applying Application manifests from Git.
-
-**Imperative creation (CLI):**
-
-```bash
-argocd app create nginx-demo \
-  --repo https://github.com/<owner>/<repo>.git \
-  --path argocd-reference-architectures/cli-demo/k8s/nginx-demo \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace nginx-demo \
-  --sync-option CreateNamespace=true \
-  --sync-policy none
-
-argocd app get nginx-demo
-argocd app sync nginx-demo
-```
-
-**Declarative creation (GitOps-style):**
-
-```bash
-kubectl apply -f argocd-reference-architectures/cli-demo/argocd/whoami-demo-app.yaml
-argocd app get whoami-demo
-```
-
-Both approaches produce the same Application resource. In practice, declarative creation via Git is preferred because it keeps the Application definition under version control.
-
-### Pattern 2 — App of Apps
-
-Apply only the parent Application. Argo CD discovers and deploys the child Applications defined in the `children/` directory.
-
-```bash
-kubectl apply -f argocd-reference-architectures/app-of-apps-demo/argocd/app-of-apps-parent.yaml
-kubectl get applications -n argocd
-kubectl get all -n aoa-alpha-nginx
-kubectl get all -n aoa-beta-httpd
-kubectl get all -n aoa-gamma-whoami
-```
-
-The `kustomization.yaml` in the `children/` directory controls which child Applications the parent manages.
-
-### Pattern 3 — ApplicationSet
-
-Apply the ApplicationSet manifest using `kubectl`. Argo CD's ApplicationSet controller reads the list generator and creates one Application per entry.
-
-```bash
-kubectl apply -f argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
-kubectl get applicationset -n argocd
-argocd app list | grep aset-
-```
+**Example use case:**
+A platform with 5–8 carefully curated services, each managed by a different team. Each team owns their Application file.
 
 ---
 
-## Validation
+### Pattern 2: App of Apps (Hierarchical Composition)
 
-**Confirm sync and health status:**
+**What it is:**
+A parent Application points to a directory of child Applications. Argo CD deploys the parent, which automatically manages all children. Control is hierarchical: the parent is the single entry point.
 
-```bash
-kubectl get applications -n argocd
-argocd app get <app-name>
-```
+**When to use:**
+- 10–50 applications
+- Applications are grouped by domain, environment, or team
+- Need a single "root" to manage the entire set
+- Some applications share configuration or rollout decisions
+- Want to group related applications for easier management
 
-**Confirm workloads are running:**
+**When NOT to use:**
+- Very small number of apps (use Pattern 1 directly)
+- Need to deploy the same app template many times (use Pattern 3)
+- Dynamic app generation needed
 
-```bash
-kubectl get all -n nginx-demo
-kubectl get all -n aoa-alpha-nginx
-kubectl get all -n aset-nginx
-```
+**Operational overhead:**
+- Add a new app? Create an Application YAML in `children/` and add it to `kustomization.yaml`.
+- Change a sync policy? Edit the individual child or the parent (cascades to all children).
+- Scales to ~50 apps before folder organization becomes awkward.
 
-**Verify NodePort-exposed applications (on the cluster node):**
+**Example use case:**
+A platform serving three product lines. Each line has 10–15 microservices. Parent Application "product-line-alpha" manages all alpha services; Argo CD and the ops team only think about the parent.
 
-```bash
-curl -s http://localhost:30095      # nginx-demo
-curl -s http://localhost:30096      # whoami-demo
-```
-
-**Inspect diff between Git and live cluster:**
-
-```bash
-argocd app diff nginx-demo
-```
+**Important:** When you delete a parent Application with cascading delete enabled, all children and their workloads are deleted. This is by design but requires discipline.
 
 ---
 
-## Failure and Recovery Scenarios
+### Pattern 3: ApplicationSet (Scalable, Parameterized Generation)
 
-The following scenarios are implemented and documented in the [argocd-demo-runbook.md](./argocd-demo-runbook.md).
+**What it is:**
+A template combined with a generator. The generator supplies parameters; ApplicationSet instantiates the template once per parameter set. Generators can be lists, Git directories, registered clusters, or matrix products.
 
-### Drift detection and self-heal
+**When to use:**
+- 50+ similar applications
+- Deploying the same app across many environments
+- Multi-cluster deployments (one ApplicationSet, N clusters)
+- Need dynamic application generation
+- Applications are generated from a Git directory structure
 
-Manually scale a deployment in the cluster to create drift:
+**When NOT to use:**
+- Each app has radically different requirements
+- Applications rarely scale; use Pattern 1 or 2 instead
 
-```bash
-kubectl scale deploy/nginx-demo -n nginx-demo --replicas=5
-argocd app get nginx-demo          # OutOfSync reported
-```
+**Operational overhead:**
+- Add a new app? Add one list element (3–5 lines) to the generator.
+- Scales gracefully to hundreds of applications.
+- If the generator breaks, all generated apps fail; blast radius is large but isolated.
 
-With self-heal enabled, Argo CD reverts the replicas automatically. Without it, the drift is reported but not corrected until a manual sync.
+**Generator types:**
+- **List**: Hard-coded list of parameters (useful for environments)
+- **Git directory**: One app per folder in Git (automatically scales)
+- **Cluster**: One app per registered Argo CD cluster (multi-cluster pattern)
+- **Matrix**: Cross-product of two generators (e.g., all apps × all regions)
 
-```bash
-argocd app set nginx-demo --sync-policy automated --self-heal
-kubectl scale deploy/nginx-demo -n nginx-demo --replicas=5
-sleep 8
-kubectl get deploy nginx-demo -n nginx-demo   # reverts to 3
-```
-
-### Automated sync from a Git commit
-
-```bash
-sed -i 's/replicas: 3/replicas: 4/' argocd-reference-architectures/cli-demo/k8s/nginx-demo/deployment.yaml
-git add -A && git commit -m "scale nginx to 4" && git push
-argocd app get nginx-demo --refresh
-```
-
-### Prune — deletion propagated from Git
-
-```bash
-argocd app set nginx-demo --sync-policy automated --self-heal --auto-prune
-git rm argocd-reference-architectures/cli-demo/k8s/nginx-demo/service.yaml
-git commit -m "remove nginx service" && git push
-argocd app get nginx-demo --refresh
-kubectl get svc -n nginx-demo      # service is gone
-```
-
-### App of Apps — removing a child
-
-Remove a child filename from `kustomization.yaml` and push. The parent detects the change and stops managing that child Application. With prune enabled, the Application and its workloads are deleted.
-
-### ApplicationSet — blast radius isolation
-
-Break the path for one entry in the list generator. Only that generated Application fails. The others remain Healthy, demonstrating that ApplicationSet isolates failures to the affected entry.
-
-### App of Apps vs ApplicationSet — scaling comparison
-
-Adding a 4th app to App of Apps requires writing a new Application YAML file. Adding a 4th app to ApplicationSet requires adding three lines to the list generator. This contrast is a key architectural decision point for teams choosing between the two patterns.
+**Example use case:**
+A SaaS platform with 200+ customer microservices. Each customer deployment is an ApplicationSet-generated Application using the cluster generator, deploying to their dedicated namespace.
 
 ---
 
-## Architecture Decisions
+## Decision Framework: Which Pattern for Your Use Case?
 
-**Why three separate patterns rather than one?**
-Each pattern solves a different problem. CLI-managed Applications are suitable for small, individually curated deployments. App of Apps is appropriate for a known, limited set of applications where each needs individual YAML-level control. ApplicationSet is appropriate when many similar Applications need to be generated, scaled, or distributed across environments or clusters. Understanding when to use each is the learning objective.
+Use this flowchart to decide:
 
-**Why is `targetRevision: main` used?**
-Pinning to `main` ensures that every merged commit triggers a reconciliation cycle. In production, pinning to a specific tag or commit SHA is preferred to prevent unintended deployments from direct pushes to the default branch.
+1. **How many applications do you have (or expect to have)?**
+   - 1–10: Pattern 1
+   - 10–50: Pattern 2 or 1
+   - 50+: Pattern 3 or Pattern 2 (grouped)
 
-**Why separate namespaces per application?**
-Namespace isolation provides a clear boundary for access control, resource quotas, and blast-radius containment. A failing workload in one namespace does not affect workloads in another.
+2. **Are the applications similar or diverse?**
+   - Diverse, each unique: Pattern 1
+   - Similar, grouped by domain: Pattern 2
+   - Highly similar or repeated: Pattern 3
 
-**Why is prune disabled by default?**
-Prune is a destructive operation. Enabling it by default increases the risk of accidental deletion from a bad commit. It should be explicitly enabled only when the team understands the implications and has rollback procedures in place.
+3. **Do you deploy to multiple clusters or environments?**
+   - Single cluster, single environment: Pattern 1 or 2
+   - Multiple clusters or environments: Pattern 3 (cluster or Git directory generator)
 
-**Why use `kustomization.yaml` for App of Apps children?**
-Kustomize provides a declarative inventory of which child Application files are included. This makes the set of managed children explicit and auditable, and allows Argo CD to detect when children are removed.
-
----
-
-## Production Considerations
-
-**Repository access and credentials**
-In production, Argo CD accesses the Git repository using SSH keys or HTTPS credentials managed through Argo CD's secret store, not hardcoded in Application manifests. Credential rotation should be part of the operational runbook.
-
-**RBAC and multi-tenancy**
-Argo CD supports project-level RBAC to restrict which teams can deploy to which namespaces and clusters. In a multi-team environment, each team should have its own Argo CD project with scoped permissions.
-
-**Target revision strategy**
-For production workloads, `targetRevision` should point to a specific Git tag or release branch rather than `main`. This prevents a direct push from triggering an unreviewed deployment.
-
-**Self-heal and prune in production**
-Both self-heal and prune should be deliberate decisions. Self-heal is generally safe to enable as it enforces GitOps correctness. Prune requires confidence in Git as the authoritative source of truth and should be introduced incrementally.
-
-**ApplicationSet generators in production**
-The list generator used here is the simplest option. For production use, the Git directory generator (one app per folder) or the cluster generator (one app per registered cluster) reduces manual list maintenance and scales better.
-
-**High availability**
-In production, Argo CD itself should be deployed with multiple replicas and persistent storage for its state. The single-instance setup used in this implementation is not suitable for production without modifications.
-
-**Secrets**
-Application secrets must not be stored in Git. Use Argo CD with an external secrets operator (e.g., External Secrets Operator with AWS Secrets Manager or HashiCorp Vault) or Sealed Secrets for GitOps-compatible secret management.
+4. **How often are you adding/removing applications?**
+   - Rarely (quarterly): Pattern 1 is fine
+   - Frequently (weekly): Pattern 2 or 3 preferred
+   - Dynamically (per customer, per region): Pattern 3 required
 
 ---
 
-## Learning Outcomes
+## Real-World Considerations
 
-After working through all three patterns, an engineer or architect should be able to:
+### Secrets and Sensitive Data
 
-- Explain the Argo CD Application CRD and its relationship to Git and the cluster
-- Understand sync state, health state, and the difference between them
-- Implement and operate all three deployment patterns
-- Design a GitOps application inventory strategy appropriate for the size and complexity of the platform
-- Execute controlled changes through Git and validate the outcome in Argo CD
-- Detect, investigate, and recover from drift, failed syncs, and degraded applications
-- Articulate the trade-offs between CLI-managed Apps, App of Apps, and ApplicationSets
-- Apply self-heal, prune, and automated sync deliberately and safely
+**Never store secrets in Git.** Use one of these approaches:
+
+- **External Secrets Operator**: Syncs secrets from AWS Secrets Manager, HashiCorp Vault, etc.
+- **Sealed Secrets**: Encrypts secrets in Git; only the cluster can decrypt
+- **Kustomize secretGenerator** with external sourcing
+- **Helm values** with a separate, non-Git secret store
+
+### Separation of Concerns
+
+- **Application maintainers** write Kubernetes manifests (`k8s/` folders)
+- **Platform team** writes Application/ApplicationSet definitions (`argocd/` folders)
+- **Cluster ops** manage Argo CD itself (installation, access, resource limits)
+
+Each role has different Git permissions and responsibilities.
+
+### Rollback and Safety
+
+Rollback in Argo CD is simple: revert the Git commit and sync. No special rollback logic needed.
+
+For safe rollbacks in production:
+- Use branches for promotion (commit → staging → QA → production)
+- Use manual sync policy in production; require approvals
+- Combine with canary or blue-green deployments in the Application sync policy
+
+### Monitoring and Observability
+
+- Monitor Application health and sync state continuously
+- Alert on OutOfSync (someone changed the cluster without Git)
+- Alert on Degraded (deployment exists but is broken)
+- Alert on reconciliation lag (Git change hasn't synced yet)
+
+### Access Control
+
+- Use Argo CD projects to restrict which teams can deploy to which namespaces
+- Integrate with external auth (OIDC, LDAP, GitHub teams)
+- Audit all deployments (Git commit author = who deployed)
+
+---
+
+## Learning Path
+
+1. **Understand the pattern** — read the sections above
+2. **See it in action** — follow [argocd-demo-runbook.md](./argocd-demo-runbook.md)
+3. **Review the code** — inspect the manifests in `cli-demo/`, `app-of-apps-demo/`, `applicationset-demo/`
+4. **Understand drift and recovery** — execute the failure scenarios in the runbook
+5. **Design your own** — choose a pattern for your platform and adapt the code
+
+---
+
+## Repository Contents
+
+| Folder | Pattern | What It Demonstrates |
+|--------|---------|----------------------|
+| `cli-demo/` | Pattern 1 | Direct Application management, drift detection, self-healing, prune |
+| `app-of-apps-demo/` | Pattern 2 | Parent-child orchestration, hierarchical control, adding/removing children |
+| `applicationset-demo/` | Pattern 3 | Template-driven generation, list generator, scaling to many apps |
+
+Each demo includes:
+- Application or ApplicationSet manifests
+- Kubernetes workload manifests
+- Operational scenarios (positive, negative, recovery)
+
+---
+
+## Installation and Setup
+
+To install Argo CD and follow the demos:
+
+1. [Install Argo CD](./installation-argocd.md) — complete setup guide
+2. [Run the demo runbook](./argocd-demo-runbook.md) — 60-minute walkthrough with all three patterns
+
+---
+
+## Production Readiness Checklist
+
+Before deploying Argo CD patterns to production:
+
+- [ ] Argo CD itself is highly available (HA setup with multiple replicas)
+- [ ] State is backed up (Argo CD database/configuration)
+- [ ] Git repositories are accessible and have read access controls
+- [ ] Secrets are managed separately from Git
+- [ ] RBAC projects limit which teams can deploy where
+- [ ] External auth (OIDC/LDAP) is integrated
+- [ ] Monitoring alerts on sync state and health
+- [ ] Runbook exists for incident response
+- [ ] Change approval process is enforced (manual sync in prod)
+- [ ] Rollback procedure is documented and tested
+
+---
+
+## Key Takeaways
+
+1. **GitOps is about declaring desired state in Git and letting an operator enforce it.**
+
+2. **Argo CD is the operator; Applications/ApplicationSets are the declarations.**
+
+3. **Three patterns exist because different scales and scenarios need different approaches.**
+
+4. **Drift detection and self-healing are powerful but require discipline — Git must be the source of truth.**
+
+5. **Secrets, access control, and observability are not optional — they're part of production design.**
+
+6. **Start with manual sync policy, add automation once the team understands the pattern.**
+
+7. **Each pattern scales to a certain size; rearchitect when you outgrow it.**
 
 ---
 
 ## Related Documentation
 
-- [Repository overview](../README.md)
-- [Argo CD live demo runbook](./argocd-demo-runbook.md)
-- [Terraform infrastructure patterns](../terraform/README.md)
+- [Argo CD installation guide](./installation-argocd.md)
+- [Live demo runbook](./argocd-demo-runbook.md)
+- [Main repository README](../README.md)
+- [Official Argo CD documentation](https://argo-cd.readthedocs.io/)

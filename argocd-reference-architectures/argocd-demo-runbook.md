@@ -35,92 +35,16 @@ cli-demo/
 
 ## Installation: Deploy Argo CD
 
-Run these steps once to install Argo CD on your cluster. This is a one-time setup.
+Follow the complete installation and setup guide: **[installation-argocd.md](./installation-argocd.md)**
 
-### 1. Create namespace
+That document covers:
+- Helm installation steps
+- CLI authentication
+- Repository access configuration
+- Post-installation setup
+- Production considerations
 
-```bash
-kubectl create namespace argocd
-```
-
-### 2. Add Argo CD Helm repository
-
-```bash
-helm repo add argo https://argoproj.github.io/argo-helm
-helm repo update
-```
-
-### 3. Install Argo CD using Helm
-
-```bash
-helm install argocd argo/argo-cd \
-  --namespace argocd \
-  --set server.service.type=NodePort \
-  --set server.service.nodePort=30090
-```
-
-Wait for all pods to be running:
-
-```bash
-kubectl get pods -n argocd -w
-```
-
-Press Ctrl+C when all pods show `Running` and `1/1` ready.
-
-### 4. Get the initial admin password
-
-```bash
-ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d)
-echo "ArgoCD admin password: $ARGOCD_PASSWORD"
-```
-
-Save this password or retrieve it again when needed.
-
-### 5. Access the Argo CD UI
-
-Find your cluster node's external IP or hostname:
-
-```bash
-kubectl get nodes -o wide
-```
-
-Open in a browser (replace `<EC2-IP>` with your node IP):
-
-```
-https://<EC2-IP>:30090
-```
-
-Login with username `admin` and the password from Step 4.
-
-**Note:** The UI uses a self-signed certificate. Ignore the SSL warning in your browser.
-
-### 6. Login with ArgoCD CLI
-
-```bash
-argocd login <EC2-IP>:30090 --insecure \
-  --username admin \
-  --password $ARGOCD_PASSWORD
-```
-
-Verify login:
-
-```bash
-argocd version --short
-argocd cluster info
-argocd app list
-```
-
-### 7. Configure Git repository access
-
-If your demo repository is private, add it to Argo CD:
-
-```bash
-argocd repo add https://github.com/Github-Arun-Repo/practice-labs.git \
-  --username <git-username> \
-  --password <git-token>
-```
-
-For a public repository, Argo CD can access it without credentials.
+After completing the installation, return here to continue with the demo.
 
 ---
 
