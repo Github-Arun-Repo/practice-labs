@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: aoa-gamma-whoami
+  name: aoa-beta-httpd
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/app-of-apps-demo/k8s/gamma-whoami
+    path: argocd-reference-architectures/app-of-apps-demo/k8s/beta-httpd
   destination:
     server: https://kubernetes.default.svc
-    namespace: aoa-gamma-whoami
+    namespace: aoa-beta-httpd
   syncPolicy:
     automated:
       selfHeal: true

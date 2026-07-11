@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: aoa-beta-httpd
+  name: aoa-alpha-nginx
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/app-of-apps-demo/k8s/beta-httpd
+    path: argocd-reference-architectures/app-of-apps-demo/k8s/alpha-nginx
   destination:
     server: https://kubernetes.default.svc
-    namespace: aoa-beta-httpd
+    namespace: aoa-alpha-nginx
   syncPolicy:
     automated:
       selfHeal: true

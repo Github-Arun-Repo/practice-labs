@@ -1,7 +1,7 @@
 # ArgoCD Live Demo — 1 Hour Runbook
 
 **Repo:** `https://github.com/Github-Arun-Repo/practice-labs.git`
-**Base folder:** `argocd-practise/`
+**Base folder:** `argocd-reference-architectures/`
 **Cluster:** standalone K8s on EC2 · **ArgoCD UI:** `https://<EC2-IP>:30090`
 **Presenter:** Arun
 
@@ -10,7 +10,7 @@
 ## Repo layout (all paths below match this)
 
 ```
-argocd-practise/
+argocd-reference-architectures/
 ├── cli-demo/
 │   ├── argocd/                     # pre-written Application manifests
 │   │   ├── nginx-demo-app.yaml     # nginx-demo      → k8s/nginx-demo     (NodePort 30095)
@@ -73,7 +73,7 @@ echo "Ready."
 ```bash
 argocd app create nginx-demo \
   --repo https://github.com/Github-Arun-Repo/practice-labs.git \
-  --path argocd-practise/cli-demo/k8s/nginx-demo \
+  --path argocd-reference-architectures/cli-demo/k8s/nginx-demo \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace nginx-demo \
   --sync-option CreateNamespace=true \
@@ -97,7 +97,7 @@ curl -s http://localhost:30095 | grep -i title
 
 ```bash
 # your repo already has the Application manifest — just apply it
-kubectl apply -f argocd-practise/cli-demo/argocd/whoami-demo-app.yaml
+kubectl apply -f argocd-reference-architectures/cli-demo/argocd/whoami-demo-app.yaml
 argocd app list
 argocd app get whoami-demo
 curl -s http://localhost:30096 | head -15
@@ -111,7 +111,7 @@ curl -s http://localhost:30096 | head -15
 ```bash
 argocd app create httpd-demo \
   --repo https://github.com/Github-Arun-Repo/practice-labs.git \
-  --path argocd-practise/cli-demo/k8s/httpd-demo \
+  --path argocd-reference-architectures/cli-demo/k8s/httpd-demo \
   --dest-server https://kubernetes.default.svc \
   --dest-namespace httpd-demo \
   --sync-option CreateNamespace=true \
@@ -177,7 +177,7 @@ kubectl get deploy nginx-demo -n nginx-demo
 **Say:** "With automated sync, a Git push IS the deploy."
 
 ```bash
-sed -i 's/replicas: 3/replicas: 4/' argocd-practise/cli-demo/k8s/nginx-demo/deployment.yaml
+sed -i 's/replicas: 3/replicas: 4/' argocd-reference-architectures/cli-demo/k8s/nginx-demo/deployment.yaml
 git add -A && git commit -m "nginx to 4 replicas (demo)" && git push
 
 argocd app get nginx-demo --refresh    # force immediate compare (skip 3-min poll)
@@ -193,7 +193,7 @@ kubectl get pods -n nginx-demo
 ```bash
 argocd app set nginx-demo --sync-policy automated --self-heal --auto-prune
 # remove the Service from Git
-git rm argocd-practise/cli-demo/k8s/nginx-demo/service.yaml
+git rm argocd-reference-architectures/cli-demo/k8s/nginx-demo/service.yaml
 git commit -m "remove nginx service (demo prune)" && git push
 argocd app get nginx-demo --refresh
 sleep 6
@@ -210,7 +210,7 @@ argocd app get nginx-demo --refresh
 **Say:** "Critical distinction: a manifest can apply cleanly yet the app be broken."
 
 ```bash
-sed -i 's#image: nginx:1.27-alpine#image: nginx:does-not-exist#' argocd-practise/cli-demo/k8s/nginx-demo/deployment.yaml
+sed -i 's#image: nginx:1.27-alpine#image: nginx:does-not-exist#' argocd-reference-architectures/cli-demo/k8s/nginx-demo/deployment.yaml
 git add -A && git commit -m "bad image (demo)" && git push
 argocd app get nginx-demo --refresh
 sleep 8
@@ -238,7 +238,7 @@ argocd app get nginx-demo --refresh
 **Say:** "Not everything is a web server — here's a noisy log generator, ties into observability talk."
 
 ```bash
-kubectl apply -f argocd-practise/cli-demo/argocd/logstorm-demo-app.yaml
+kubectl apply -f argocd-reference-architectures/cli-demo/argocd/logstorm-demo-app.yaml
 argocd app get logstorm-demo
 kubectl logs -n logstorm-demo -l app=logstorm-demo --tail=5 --prefix
 ```
@@ -267,15 +267,15 @@ argocd app delete httpd-demo --yes                # (if created) clean removal
 **Say:** "App of Apps is just an Application whose Git path contains OTHER Application manifests. No special CRD."
 
 ```bash
-cat argocd-practise/app-of-apps-demo/argocd/app-of-apps-parent.yaml
-ls argocd-practise/app-of-apps-demo/argocd/children/
+cat argocd-reference-architectures/app-of-apps-demo/argocd/app-of-apps-parent.yaml
+ls argocd-reference-architectures/app-of-apps-demo/argocd/children/
 ```
 👉 Parent `argo-demo-parent` points at `children/`, which holds 3 Application YAMLs + a kustomization.
 
 ## 2.2 — Deploy the parent, watch children appear
 
 ```bash
-kubectl apply -f argocd-practise/app-of-apps-demo/argocd/app-of-apps-parent.yaml
+kubectl apply -f argocd-reference-architectures/app-of-apps-demo/argocd/app-of-apps-parent.yaml
 argocd app sync argo-demo-parent
 argocd app list
 ```
@@ -310,13 +310,13 @@ argocd app get aoa-alpha-nginx
 
 ```bash
 # copy an existing child as a template for a 4th (reuses alpha-nginx manifests so it deploys)
-cp argocd-practise/app-of-apps-demo/argocd/children/alpha-nginx-app.yaml \
-   argocd-practise/app-of-apps-demo/argocd/children/delta-extra-app.yaml
+cp argocd-reference-architectures/app-of-apps-demo/argocd/children/alpha-nginx-app.yaml \
+   argocd-reference-architectures/app-of-apps-demo/argocd/children/delta-extra-app.yaml
 sed -i 's/aoa-alpha-nginx/aoa-delta-extra/g' \
-   argocd-practise/app-of-apps-demo/argocd/children/delta-extra-app.yaml
+   argocd-reference-architectures/app-of-apps-demo/argocd/children/delta-extra-app.yaml
 # register it in the kustomization
 sed -i '/gamma-whoami-app.yaml/a\  - delta-extra-app.yaml' \
-   argocd-practise/app-of-apps-demo/argocd/children/kustomization.yaml
+   argocd-reference-architectures/app-of-apps-demo/argocd/children/kustomization.yaml
 
 git add -A && git commit -m "app-of-apps: add 4th child (demo)" && git push
 argocd app sync argo-demo-parent
@@ -346,7 +346,7 @@ argocd app list | grep aoa-
 **Say:** "ApplicationSet is a separate CRD with its own controller. One template, a generator supplies the values."
 
 ```bash
-cat argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+cat argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 ```
 👉 Point out: `generators.list.elements` (the 3 apps) and `template` with `{{appName}}`, `{{namespace}}`, `{{path}}`.
 
@@ -354,7 +354,7 @@ cat argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
 
 ```bash
 # ApplicationSet is applied with kubectl, NOT `argocd app create`
-kubectl apply -f argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+kubectl apply -f argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 kubectl get applicationset -n argocd
 argocd app list | grep aset-
 ```
@@ -375,14 +375,14 @@ kubectl get pods -n aset-whoami
 cat > /tmp/aset_patch.txt << 'EOF'
           - appName: aset-extra
             namespace: aset-extra
-            path: argocd-practise/applicationset-demo/k8s/aset-nginx
+            path: argocd-reference-architectures/applicationset-demo/k8s/aset-nginx
 EOF
 sed -i '/elements:/r /tmp/aset_patch.txt' \
-  argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+  argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 
-cat argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml   # verify
+cat argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml   # verify
 git add -A && git commit -m "appset: add 4th app (demo)" && git push
-kubectl apply -f argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+kubectl apply -f argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 
 sleep 5
 argocd app list | grep aset-
@@ -406,9 +406,9 @@ kubectl get deploy -n aset-nginx
 ```bash
 # remove the aset-extra element we just added
 sed -i '/appName: aset-extra/,+2d' \
-  argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+  argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 git add -A && git commit -m "appset: remove 4th app (demo)" && git push
-kubectl apply -f argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+kubectl apply -f argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 sleep 5
 argocd app list | grep aset-       # aset-extra is gone
 ```
@@ -432,7 +432,7 @@ argocd app list | grep aset-       # aset-extra is gone
 
 ```bash
 # ApplicationSet
-kubectl delete -f argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml 2>/dev/null || true
+kubectl delete -f argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml 2>/dev/null || true
 # App of Apps (cascade removes children)
 argocd app delete argo-demo-parent --cascade --yes 2>/dev/null || true
 # CLI apps
@@ -442,12 +442,12 @@ kubectl delete ns nginx-demo httpd-demo whoami-demo logstorm-demo \
   aoa-alpha-nginx aoa-beta-httpd aoa-gamma-whoami aoa-delta-extra \
   aset-nginx aset-httpd aset-whoami aset-extra 2>/dev/null || true
 # revert demo edits to Git
-git checkout argocd-practise/cli-demo/k8s/nginx-demo/deployment.yaml
-git checkout argocd-practise/cli-demo/k8s/nginx-demo/service.yaml 2>/dev/null || true
+git checkout argocd-reference-architectures/cli-demo/k8s/nginx-demo/deployment.yaml
+git checkout argocd-reference-architectures/cli-demo/k8s/nginx-demo/service.yaml 2>/dev/null || true
 # (optional) drop the demo-added files:
-# git rm argocd-practise/app-of-apps-demo/argocd/children/delta-extra-app.yaml
-# git checkout argocd-practise/app-of-apps-demo/argocd/children/kustomization.yaml
-# git checkout argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+# git rm argocd-reference-architectures/app-of-apps-demo/argocd/children/delta-extra-app.yaml
+# git checkout argocd-reference-architectures/app-of-apps-demo/argocd/children/kustomization.yaml
+# git checkout argocd-reference-architectures/applicationset-demo/argocd/applicationset-demo.yaml
 # git commit -m "reset demo state" && git push
 ```
 

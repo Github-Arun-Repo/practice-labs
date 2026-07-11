@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: whoami-demo
+  name: aoa-gamma-whoami
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/cli-demo/k8s/whoami-demo
+    path: argocd-reference-architectures/app-of-apps-demo/k8s/gamma-whoami
   destination:
     server: https://kubernetes.default.svc
-    namespace: whoami-demo
+    namespace: aoa-gamma-whoami
   syncPolicy:
     automated:
       selfHeal: true

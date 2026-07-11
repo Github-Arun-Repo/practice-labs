@@ -9,13 +9,13 @@ spec:
         elements:
           - appName: aset-nginx
             namespace: aset-nginx
-            path: argocd-practise/applicationset-demo/k8s/aset-nginx
+            path: argocd-reference-architectures/applicationset-demo/k8s/aset-nginx
           - appName: aset-httpd
             namespace: aset-httpd
-            path: argocd-practise/applicationset-demo/k8s/aset-httpd
+            path: argocd-reference-architectures/applicationset-demo/k8s/aset-httpd
           - appName: aset-whoami
             namespace: aset-whoami
-            path: argocd-practise/applicationset-demo/k8s/aset-whoami
+            path: argocd-reference-architectures/applicationset-demo/k8s/aset-whoami
   template:
     metadata:
       name: '{{appName}}'

@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: httpd-demo
+  name: argo-demo-parent
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/cli-demo/k8s/httpd-demo
+    path: argocd-reference-architectures/app-of-apps-demo/argocd/children
   destination:
     server: https://kubernetes.default.svc
-    namespace: httpd-demo
+    namespace: argocd
   syncPolicy:
     automated:
       selfHeal: true

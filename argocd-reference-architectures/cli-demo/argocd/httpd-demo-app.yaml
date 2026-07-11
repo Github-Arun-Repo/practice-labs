@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: logstorm-demo
+  name: httpd-demo
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/cli-demo/k8s/logstorm-demo
+    path: argocd-reference-architectures/cli-demo/k8s/httpd-demo
   destination:
     server: https://kubernetes.default.svc
-    namespace: logstorm-demo
+    namespace: httpd-demo
   syncPolicy:
     automated:
       selfHeal: true

@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: aoa-alpha-nginx
+  name: logstorm-demo
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/Github-Arun-Repo/practice-labs.git
     targetRevision: main
-    path: argocd-practise/app-of-apps-demo/k8s/alpha-nginx
+    path: argocd-reference-architectures/cli-demo/k8s/logstorm-demo
   destination:
     server: https://kubernetes.default.svc
-    namespace: aoa-alpha-nginx
+    namespace: logstorm-demo
   syncPolicy:
     automated:
       selfHeal: true

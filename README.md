@@ -1,232 +1,197 @@
-# Argo CD Learning Lab
+# Platform Engineering Reference Architectures
 
-This folder contains three complete Argo CD demo tracks:
-- CLI demo: create Application resources directly from command line
-- App of Apps demo: one parent Application creates child Applications
-- ApplicationSet demo: one ApplicationSet generates multiple Applications
+> A growing collection of validated infrastructure patterns, reference implementations, operational guidance, and reusable platform-engineering blueprints — covering Kubernetes, GitOps, AWS, Terraform, and AI infrastructure.
 
-## Folder Layout
+---
 
-```text
-argocd-practise/
-├── cli-demo/
-│   ├── k8s/
-│   └── argocd/
-├── app-of-apps-demo/
-│   ├── k8s/
-│   └── argocd/
-├── applicationset-demo/
-│   ├── k8s/
-│   └── argocd/
-└── auth-test.txt
-```
+## About This Repository
 
-## Prerequisites
+This repository exists to share architecture knowledge in a form that engineers and architects can directly inspect, deploy, and build upon. It is not a set of theoretical diagrams — the implementations here are based on production experience and have been validated through hands-on environments, architecture exercises, deployment testing, and operational scenarios.
 
-- A running Kubernetes cluster
-- Argo CD installed in namespace `argocd`
-- kubectl access to the cluster
-- Repo changes pushed to `main` (the manifests use `targetRevision: main`)
+The repository covers both cloud-hosted and standalone infrastructure platforms. Each section explains not only what to deploy, but why particular design decisions are made, how components fit together, and what to do when things go wrong.
 
-Quick check commands:
+**What you will find here:**
 
-```bash
-kubectl get ns argocd
-kubectl get pods -n argocd
-```
+- Reference architectures with documented design decisions
+- Reusable infrastructure blueprints across cloud and Kubernetes
+- GitOps and CI/CD implementation patterns
+- Deployment, failure, recovery, and rollback scenarios
+- Operational guidance informed by real enterprise infrastructure experience
+- Production-readiness considerations, not just deployment instructions
 
-## Demo 1: CLI Application Demo
+The repository is continuously expanding. New sections covering advanced Kubernetes, multi-cluster GitOps, AWS platform patterns, observability, security, event-driven architecture, and AI infrastructure are planned and will be added progressively.
 
-Goal: learn the direct way to register apps in Argo CD.
+**Target audiences:**
 
-Argo manifests:
-- argocd-practise/cli-demo/argocd
+- Cloud architects and platform engineers
+- Kubernetes and EKS engineers
+- DevOps and SRE engineers
+- Infrastructure engineers and technical leads
+- Engineers transitioning into platform architecture
+- Engineers learning AI infrastructure patterns
 
-Workload manifests:
-- argocd-practise/cli-demo/k8s
+---
 
-### Positive scenario
+## About the Author
 
-1. Apply all Argo Application manifests.
+This repository is maintained by **Arun**, an experienced AWS Cloud Architect and infrastructure architect with more than a decade of experience designing, building, operating, and improving enterprise infrastructure platforms.
 
-```bash
-kubectl apply -f argocd-practise/cli-demo/argocd
-```
+His areas of expertise include:
 
-2. Verify Applications were created.
+- **AWS cloud architecture** — multi-account organisations, networking, security, and scalable service design
+- **Kubernetes and Amazon EKS** — cluster architecture, workload management, autoscaling, and operational practices
+- **Terraform and Infrastructure as Code** — modular design, state management, and reproducible environments
+- **GitOps and CI/CD** — Argo CD, ApplicationSets, synchronisation strategies, and automated delivery pipelines
+- **Cloud networking** — VPC design, subnet strategy, routing, and security boundaries
+- **Distributed systems and event-driven architecture** — Kafka, streaming platforms, and asynchronous patterns
+- **Observability and monitoring** — metrics, logging, alerting, and tracing across infrastructure layers
+- **Infrastructure security** — least-privilege access, secrets management, encryption, and compliance controls
+- **Platform engineering** — internal developer platforms, golden paths, and infrastructure automation
+- **Reliability and scalability** — availability design, capacity planning, failure handling, and disaster recovery
 
-```bash
-kubectl get applications -n argocd
-```
+Arun is actively expanding the repository into AI infrastructure topics, including GPU workload scheduling, NVIDIA device plugins, AI model hosting on Kubernetes, ML infrastructure, MLOps platforms, autoscaling AI workloads, and model observability.
 
-3. Verify workloads in app namespaces.
+---
 
-```bash
-kubectl get all -n httpd-demo
-kubectl get all -n nginx-demo
-kubectl get all -n whoami-demo
-kubectl get all -n logstorm-demo
-```
+## What This Repository Teaches
 
-Expected result:
-- Applications become Synced/Healthy
-- Pods and Services come up in each namespace
+Each section in this repository is designed to build architectural understanding, not just operational familiarity. After working through the material, engineers and architects should understand:
 
-### Negative scenario
+- How infrastructure components fit together at the architecture level
+- Why specific design decisions are made and what trade-offs they involve
+- How infrastructure is automated, versioned, and made reproducible
+- How GitOps and CI/CD pipelines are implemented and how they handle failure
+- How workloads are deployed, operated, and recovered
+- How drift, failure, rollback, scaling, and recovery behave in practice
+- How production-readiness differs from simply deploying a working application
+- What observability, security, and networking considerations apply to each pattern
 
-1. Edit one app source path to an invalid path in one file under `cli-demo/argocd`.
-2. Commit and push.
-3. Observe Application status in Argo CD.
+---
 
-Expected result:
-- One app moves to OutOfSync/Degraded
-- Argo CD reports render/path error
+## Repository Contents
 
-Recovery:
-1. Restore the correct path.
-2. Commit and push.
-3. Sync again and verify app returns to Healthy.
+| Area | Description | Documentation |
+|---|---|---|
+| GitOps and Argo CD Reference Architectures | Argo CD deployment patterns covering CLI-managed Applications, the App-of-Apps pattern, and ApplicationSets. Includes synchronisation strategies, self-healing, drift detection, rollback, and failure scenarios validated on a standalone Kubernetes cluster. | [View documentation](./argocd-reference-architectures/README.md) |
+| Terraform Infrastructure Patterns | Modular Terraform for AWS infrastructure. Current implementation covers a production-oriented multi-AZ VPC with public and private subnet tiers, and secure S3 buckets with encryption, versioning, lifecycle policies, and optional Object Lock. Remote state and locking via S3 and DynamoDB. | [View documentation](./terraform/README.md) |
 
-## Demo 2: App of Apps Demo
+---
 
-Goal: learn parent-child orchestration using Applications.
+## Architecture Principles
 
-Parent manifest:
-- argocd-practise/app-of-apps-demo/argocd/app-of-apps-parent.yaml
+The implementations in this repository are guided by the following principles.
 
-Child manifests:
-- argocd-practise/app-of-apps-demo/argocd/children
+**Everything as Code**
+Infrastructure, configuration, and deployment definitions are written as code, committed to Git, and managed through automated pipelines. Manual configuration is avoided.
 
-Workload manifests:
-- argocd-practise/app-of-apps-demo/k8s
+**Automation over Manual Configuration**
+Repetitive operations are automated. Manual steps introduce inconsistency, are not reproducible at scale, and create operational risk.
 
-### Positive scenario
+**Reproducibility**
+Any environment described in this repository can be recreated consistently from the same inputs. This applies to infrastructure, application deployment, and operational tooling.
 
-1. Apply only the parent Application.
+**Security by Design**
+Security controls are applied at the design stage, not added after the fact. Access is restricted to the minimum required. Encryption, isolation, and audit trails are defaults, not options.
 
-```bash
-kubectl apply -f argocd-practise/app-of-apps-demo/argocd/app-of-apps-parent.yaml
-```
+**Least Privilege**
+Components, identities, and workloads are granted only the permissions they require to function. Over-permissioned roles and policies are an architecture defect.
 
-2. Verify parent and children were created.
+**Observability by Default**
+Infrastructure and workloads are designed to be observable. Metrics, logs, and health signals are built in, not retrofitted.
 
-```bash
-kubectl get applications -n argocd
-```
+**Git as the Source of Truth**
+The desired state of infrastructure and applications is defined in Git. The cluster or cloud environment reflects Git, not the other way around. Drift from Git is a defect.
 
-3. Verify workloads in child namespaces.
+**Immutable and Repeatable Deployments**
+Deployments use versioned, immutable artefacts. Upgrading means replacing, not patching in place.
 
-```bash
-kubectl get all -n aoa-alpha-nginx
-kubectl get all -n aoa-beta-httpd
-kubectl get all -n aoa-gamma-whoami
-```
+**Failure-Aware Architecture**
+The design accounts for failure. Recovery paths, rollback strategies, and blast-radius isolation are considered during design, not only during incidents.
 
-Expected result:
-- Parent app creates and manages child apps
-- Child apps sync workloads automatically
+**Scalability**
+Patterns are designed to scale without requiring structural changes. ApplicationSets, modular Terraform, and parameterised templates are examples of this principle in practice.
 
-### Negative scenario
+**Operational Simplicity**
+Architecture choices favour operational clarity. A simpler, well-understood design that teams can reason about is preferable to a clever design that introduces cognitive overhead.
 
-1. Remove one child file from `app-of-apps-demo/argocd/children/kustomization.yaml`.
-2. Commit and push.
-3. Observe missing child app in Argo CD.
+**Documentation as Part of Architecture**
+Architecture decisions, design rationale, and operational procedures are documented alongside the implementation. Code without documentation transfers knowledge poorly.
 
-Expected result:
-- Removed child app is pruned (if prune is enabled) or no longer managed by parent
-- Team learns parent controls child app inventory
+---
 
-Recovery:
-1. Add the child back to `kustomization.yaml`.
-2. Commit and push.
-3. Parent recreates/manages child again.
+## Production-Readiness Focus
 
-## Demo 3: ApplicationSet Demo
+A working deployment is not the same as a production-ready deployment. This repository addresses the concerns that separate the two.
 
-Goal: learn scalable app generation from one manifest.
+Production infrastructure requires explicit design decisions across the following areas:
 
-ApplicationSet manifest:
-- argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
+| Concern | What it involves |
+|---|---|
+| Availability | Multi-AZ placement, replica configuration, health checks, and service continuity |
+| Resilience | Failure isolation, self-healing, circuit breaking, and graceful degradation |
+| Security | Least-privilege access, network segmentation, secrets management, and encryption at rest and in transit |
+| Networking | Subnet strategy, routing, egress control, service exposure, and DNS |
+| Secrets management | Avoiding hardcoded credentials, using secret stores, and rotating secrets safely |
+| Upgrade strategies | Zero-downtime updates, rolling deployments, canary patterns, and Kubernetes version upgrades |
+| Rollback | Detecting degraded deployments, reverting to a known-good state, and validating recovery |
+| Disaster recovery | State backup, RTO and RPO targets, and recovery procedures |
+| Monitoring | Cluster, workload, infrastructure, and application-level metrics |
+| Logging | Centralised log collection, retention, and querying |
+| Alerting | Threshold-based and anomaly-based alerts with actionable runbooks |
+| Cost awareness | Right-sizing, idle resource elimination, and cost attribution by team or workload |
+| Capacity planning | Understanding growth patterns and provisioning ahead of demand |
+| Operational ownership | Clear ownership of infrastructure components, runbooks, and incident response |
 
-Workload manifests:
-- argocd-practise/applicationset-demo/k8s
+Where relevant, each section in this repository addresses applicable production concerns directly.
 
-### Positive scenario
+---
 
-1. Apply the ApplicationSet.
+## Roadmap
 
-```bash
-kubectl apply -f argocd-practise/applicationset-demo/argocd/applicationset-demo.yaml
-```
+The following areas are planned for addition. Items listed here are planned directions and are not yet implemented unless explicitly documented in a folder.
 
-2. Verify generated Applications.
+- Advanced Kubernetes architecture patterns
+- Multi-cluster GitOps with Argo CD
+- AWS and EKS platform patterns
+- Amazon EKS cluster architecture and node group design
+- Observability stacks (metrics, logging, tracing)
+- Infrastructure security patterns
+- Kafka and event-driven platform architecture
+- CI/CD pipeline architecture
+- Service mesh patterns
+- AI infrastructure on Kubernetes
+- GPU workload scheduling and NVIDIA device plugin configuration
+- AI model serving and inference deployment
+- MLOps platform patterns
+- Autoscaling AI workloads
+- Infrastructure automation and platform engineering tooling
+- Reliability engineering and chaos testing patterns
 
-```bash
-kubectl get applications -n argocd | grep '^aset-'
-```
+---
 
-3. Verify workloads in generated namespaces.
+## How to Use This Repository
 
-```bash
-kubectl get all -n aset-nginx
-kubectl get all -n aset-httpd
-kubectl get all -n aset-whoami
-```
+Each folder in this repository follows a consistent structure: overview, architecture, design decisions, implementation steps, validation, and failure scenarios. The suggested approach for each section is:
 
-Expected result:
-- One ApplicationSet creates multiple Applications
-- All generated apps sync independently
+1. Read the folder README to understand the architecture and design intent.
+2. Review the manifests or Terraform code to understand the implementation.
+3. Examine the architecture decisions and understand the trade-offs.
+4. Deploy in a safe, non-production environment.
+5. Execute the validation steps to confirm the implementation behaves as expected.
+6. Work through the failure and recovery scenarios to understand operational behaviour.
+7. Review production considerations before adapting the pattern.
+8. Adapt the pattern to your own organisational requirements, naming conventions, and constraints.
 
-### Negative scenario
+---
 
-1. Break one element path in the list generator.
-2. Commit and push.
-3. Observe exactly one generated app failing while others remain healthy.
+## Disclaimer
 
-Expected result:
-- Blast radius is limited to one generated app
-- Demonstrates safer scaling model
+The implementations in this repository are provided for reference and learning purposes. Before using any pattern in a production environment:
 
-Recovery:
-1. Fix the broken path.
-2. Commit and push.
-3. ApplicationSet reconciles and app returns to Healthy.
+- Review all manifests, Terraform code, and configuration against your organisation's security, compliance, and operational standards.
+- Validate that versions, resource sizes, CIDR ranges, region selections, and access controls are appropriate for your environment.
+- Assess cost implications for your workload profile and cloud account.
+- Ensure that secrets, credentials, and sensitive configuration are managed according to your organisation's requirements and are never stored in version control.
+- Test thoroughly in a non-production environment before applying to production workloads.
 
-## What To Practice Across All Three
-
-1. Drift correction
-- Manually change a Deployment replica count in cluster
-- Observe Argo self-heal restoring desired state
-
-2. GitOps rollback
-- Change image tag to a bad tag
-- Observe failure
-- Revert commit and watch recovery
-
-3. Namespace and access boundaries
-- Use dedicated namespaces per demo app
-- Show clear ownership and blast-radius isolation
-
-4. Change propagation speed
-- Compare how quickly each pattern updates apps after Git push
-
-## Suggested Learning Order
-
-1. Start with CLI demo to understand basic Application CRD behavior
-2. Move to App of Apps to understand composition and app grouping
-3. Finish with ApplicationSet to understand scalable app generation
-
-## Handy Commands
-
-```bash
-kubectl get applications -n argocd
-kubectl describe applications -n argocd <app-name>
-kubectl get events -n argocd --sort-by=.metadata.creationTimestamp
-kubectl logs -n logstorm-demo -l app=logstorm-demo -f --tail=50
-```
-
-## Troubleshooting Tips
-
-- If apps stay OutOfSync, verify `repoURL`, `targetRevision`, and `path`
-- If no resources appear, verify Argo CD has repo access and correct permissions
-- If ApplicationSet does not generate apps, check ApplicationSet controller pod in `argocd` namespace
+The author accepts no liability for issues arising from use of these implementations in production environments.
