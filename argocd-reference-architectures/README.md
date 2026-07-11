@@ -6,7 +6,7 @@ This section documents three progressive Argo CD deployment patterns, implemente
 
 The implementations cover the full operational lifecycle: initial synchronisation, drift detection, self-healing, rollback, failure injection, and recovery. They are not documentation-only examples — each pattern has been deployed, tested through positive and negative scenarios, and documented with operational detail.
 
-A full live-demo runbook is available at [argocd-demo-runbook.md](../argocd-demo-runbook.md), covering a structured 60-minute walkthrough with presenter notes and timed segments.
+A full live-demo runbook is available at [argocd-demo-runbook.md](./argocd-demo-runbook.md), covering a structured 60-minute walkthrough with presenter notes and timed segments.
 
 ---
 
@@ -219,7 +219,7 @@ argocd app diff nginx-demo
 
 ## Failure and Recovery Scenarios
 
-The following scenarios are implemented and documented in the [argocd-demo-runbook.md](../argocd-demo-runbook.md).
+The following scenarios are implemented and documented in the [argocd-demo-runbook.md](./argocd-demo-runbook.md).
 
 ### Drift detection and self-heal
 
@@ -333,5 +333,5 @@ After working through all three patterns, an engineer or architect should be abl
 ## Related Documentation
 
 - [Repository overview](../README.md)
-- [Argo CD live demo runbook](../argocd-demo-runbook.md)
+- [Argo CD live demo runbook](./argocd-demo-runbook.md)
 - [Terraform infrastructure patterns](../terraform/README.md)
