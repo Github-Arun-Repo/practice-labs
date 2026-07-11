@@ -52,6 +52,7 @@ After completing the installation, return here to continue with the demo.
 
 Run these checks before starting the demo. Assume Argo CD is already installed from the Installation section above.
 
+```bash
 # local clone current?
 cd ~/platform-engineering-reference-architectures && git pull        # adjust to your local clone path
 
