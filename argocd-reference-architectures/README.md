@@ -8,6 +8,22 @@ Beyond just showing code, this documentation teaches the architectural reasoning
 
 ---
 
+## Quick Start — Choose Your Path
+
+**I just want to see a live demo:**
+→ [Run the 60-minute demo runbook](./argocd-demo-runbook.md) (requires Argo CD installed)
+
+**I want to install Argo CD first:**
+→ [Follow the installation guide](./installation-argocd.md)
+
+**I want to understand the patterns and make a design choice:**
+→ [Jump to the three patterns](#the-three-patterns-when-to-use-each)
+
+**I want to understand GitOps fundamentals:**
+→ [Continue reading below](#gitops-principles)
+
+---
+
 ## GitOps Principles
 
 Before exploring patterns, understand the core GitOps philosophy:
