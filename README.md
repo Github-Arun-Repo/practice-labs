@@ -4,7 +4,7 @@ A growing collection of practical infrastructure patterns, reference implementat
 
 ## About This Repository
 
-I am Arun, an AWS Cloud Architect with extensive experience designing and building cloud infrastructure, Kubernetes platforms, Infrastructure as Code, GitOps, CI/CD, networking, and distributed systems.
+I am **Arunasalam Govindasamy**, an AWS Cloud Architect with extensive experience designing and building cloud infrastructure, Kubernetes platforms, Infrastructure as Code, GitOps, CI/CD, networking, and distributed systems.
 
 I created this repository to share infrastructure patterns that engineers and architects can inspect, deploy, test, and learn from.
 
