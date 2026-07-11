@@ -33,9 +33,100 @@ cli-demo/
 
 ---
 
-## 0. PRE-FLIGHT
+## Installation: Deploy Argo CD
+
+Run these steps once to install Argo CD on your cluster. This is a one-time setup.
+
+### 1. Create namespace
 
 ```bash
+kubectl create namespace argocd
+```
+
+### 2. Add Argo CD Helm repository
+
+```bash
+helm repo add argo https://argoproj.github.io/argo-helm
+helm repo update
+```
+
+### 3. Install Argo CD using Helm
+
+```bash
+helm install argocd argo/argo-cd \
+  --namespace argocd \
+  --set server.service.type=NodePort \
+  --set server.service.nodePort=30090
+```
+
+Wait for all pods to be running:
+
+```bash
+kubectl get pods -n argocd -w
+```
+
+Press Ctrl+C when all pods show `Running` and `1/1` ready.
+
+### 4. Get the initial admin password
+
+```bash
+ARGOCD_PASSWORD=$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d)
+echo "ArgoCD admin password: $ARGOCD_PASSWORD"
+```
+
+Save this password or retrieve it again when needed.
+
+### 5. Access the Argo CD UI
+
+Find your cluster node's external IP or hostname:
+
+```bash
+kubectl get nodes -o wide
+```
+
+Open in a browser (replace `<EC2-IP>` with your node IP):
+
+```
+https://<EC2-IP>:30090
+```
+
+Login with username `admin` and the password from Step 4.
+
+**Note:** The UI uses a self-signed certificate. Ignore the SSL warning in your browser.
+
+### 6. Login with ArgoCD CLI
+
+```bash
+argocd login <EC2-IP>:30090 --insecure \
+  --username admin \
+  --password $ARGOCD_PASSWORD
+```
+
+Verify login:
+
+```bash
+argocd version --short
+argocd cluster info
+argocd app list
+```
+
+### 7. Configure Git repository access
+
+If your demo repository is private, add it to Argo CD:
+
+```bash
+argocd repo add https://github.com/Github-Arun-Repo/practice-labs.git \
+  --username <git-username> \
+  --password <git-token>
+```
+
+For a public repository, Argo CD can access it without credentials.
+
+---
+
+## 0. PRE-FLIGHT
+
+Run these checks before starting the demo. Assume Argo CD is already installed from the Installation section above.
 # local clone current?
 cd ~/practice-labs && git pull        # adjust to your local clone path
 
@@ -56,7 +147,14 @@ kubectl delete ns nginx-demo httpd-demo whoami-demo logstorm-demo \
 echo "Ready."
 ```
 
-**Timing plan (60 min):** CLI ≈ 28 min · App-of-Apps ≈ 15 min · ApplicationSet ≈ 12 min · Q&A ≈ 5 min.
+**Timing plan:**
+- Installation (one-time): ≈ 10 min
+- Pre-flight checks: ≈ 2 min
+- CLI demo: ≈ 28 min
+- App-of-Apps demo: ≈ 15 min
+- ApplicationSet demo: ≈ 12 min
+- Q&A: ≈ 5 min
+- **Total demo time (without installation): ≈ 60 min**
 
 ---
 ---
