@@ -10,12 +10,7 @@ I created this repository to share infrastructure patterns that engineers and ar
 
 The implementations are not documentation-only examples. They have been built and validated through hands-on deployments, operational testing, failure scenarios, recovery exercises, and architecture analysis.
 
-The goal is to explain not only **how infrastructure is created**, but also:
-
-- Why a particular architecture was selected
-- How the components work together
-- How failures, drift, rollback, security, and scalability are handled
-- What must be considered before using a pattern in production
+The repository contains practical and reusable infrastructure implementations designed to help engineers understand, deploy, and operate modern platforms.
 
 ## Reference Architectures
 
