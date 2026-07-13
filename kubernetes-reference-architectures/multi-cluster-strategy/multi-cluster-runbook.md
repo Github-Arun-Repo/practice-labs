@@ -1,8 +1,19 @@
-# Multi-Cluster Strategy Demo Runbook (Shared Cluster Multi-Tenancy)
+# Multi-Cluster Strategy Runbook (Shared Cluster Multi-Tenancy)
 
 **Repo:** `https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git`
 **Base folder:** `kubernetes-reference-architectures/multi-cluster-strategy/`
 **Assumption:** Kubernetes is already installed and reachable.
+
+---
+
+## Timing Plan
+
+- Pre-flight checks and context validation: 5 minutes
+- Pattern deployment and resource verification: 10-12 minutes
+- Baseline checks (limits, service accounts, quotas): 8-10 minutes
+- Failure tests and policy validation: 18-22 minutes
+- Cleanup and post-check: 3-5 minutes
+- **Total expected duration:** 45-55 minutes
 
 ---
 
@@ -25,7 +36,7 @@ You will also run failure tests to prove that guardrails actually enforce isolat
 ```text
 multi-cluster-strategy/
 ├── README.md
-├── multi-cluster-demo-runbook.md
+├── multi-cluster-runbook.md
 └── k8s/shared-cluster/
     ├── kustomization.yaml
     ├── team-a/
@@ -218,7 +229,7 @@ kubectl delete -k k8s/shared-cluster
 
 ---
 
-## Teaching Notes
+## Operational Notes
 
 1. Namespace-only isolation is not enough; enforce identity, quotas, and network controls together.
 2. Guardrails should be tested with failure scenarios, not assumed.

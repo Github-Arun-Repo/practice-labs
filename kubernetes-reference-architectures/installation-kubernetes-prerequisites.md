@@ -63,4 +63,4 @@ The current pattern (`multi-cluster-strategy`) assumes:
 
 Proceed to:
 - [Multi-Cluster Strategy README](./multi-cluster-strategy/README.md)
-- [Multi-Cluster Demo Runbook](./multi-cluster-strategy/multi-cluster-demo-runbook.md)
+- [Multi-Cluster Runbook](./multi-cluster-strategy/multi-cluster-runbook.md)
