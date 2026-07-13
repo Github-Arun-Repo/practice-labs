@@ -3,7 +3,7 @@
 **Repo:** `https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git`
 **Base folder:** `.` (current directory in argocd-reference-architectures/)
 **Cluster:** standalone K8s on EC2 · **ArgoCD UI:** `https://<EC2-IP>:30090`
-**Presenter:** Arun
+**Presenter:** Arunasalam Govindasamy
 
 ---
 
