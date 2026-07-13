@@ -33,17 +33,17 @@ helm repo update
 
 ### 3. Install Jenkins using Helm
 
-This installs Jenkins with the UI exposed via NodePort on port 30080, suitable for demo and learning environments.
+This installs Jenkins with the UI exposed via NodePort on port 30085, suitable for implementation and learning environments.
 
 ```bash
 helm install jenkins jenkinsci/jenkins \
   --namespace jenkins \
   --set controller.serviceType=NodePort \
   --set controller.nodePort=30085 \
-  --set controller.adminUser=admin \
-  --set persistence.storageClass="" \
-  --set persistence.accessMode=ReadWriteOnce \
-  --set persistence.size=8Gi
+  --set controller.admin.username=admin \
+  --set controller.persistence.storageClass="" \
+  --set controller.persistence.accessMode=ReadWriteOnce \
+  --set controller.persistence.size=8Gi
 ```
 
 Wait for the Jenkins pod to be running:
@@ -79,7 +79,7 @@ kubectl get nodes -o wide
 Open in a browser:
 
 ```
-http://<NODE-IP>:30080
+http://<NODE-IP>:30085
 ```
 
 Login with:
@@ -186,7 +186,7 @@ Confirm Jenkins is up and configured correctly:
 kubectl get pods -n jenkins
 
 # Jenkins reachable via NodePort
-curl -s -o /dev/null -w "%{http_code}" http://<NODE-IP>:30080/login
+curl -s -o /dev/null -w "%{http_code}" http://<NODE-IP>:30085/login
 # Expect: 200
 ```
 
