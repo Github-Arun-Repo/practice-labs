@@ -140,11 +140,12 @@ kubectl get all -n httpd-demo
 
 👉 This app is now fully managed by Argo CD even though no Application YAML was applied from Git.
 
-Optional check (ClusterIP app):
+Optional check (ClusterIP app — port-forward to the service):
 
 ```bash
-kubectl port-forward -n httpd-demo svc/httpd-demo 8081:80
+kubectl port-forward -n httpd-demo svc/httpd-demo 8081:80 &
 curl -s http://localhost:8081 | head -20
+kill %1   # stop the port-forward
 ```
 
 ## 1.3 — Inspect: get, diff, manifests, resource tree, raw CR
