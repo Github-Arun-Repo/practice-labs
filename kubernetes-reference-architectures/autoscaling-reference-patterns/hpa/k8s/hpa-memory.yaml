@@ -1,0 +1,35 @@
+# HPA — Memory-based scaling
+#
+# Target: 70% average memory utilization across all php-apache pods.
+# Memory-based HPA is less common because memory usage doesn't decrease
+# as predictably as CPU after load is removed (GC, page cache, heap retention).
+#
+# This manifest is provided for reference and comparison.
+# For active memory-based scaling, combine with a memory-stressing workload.
+#
+# NOTE: Do not apply both hpa-cpu.yaml and hpa-memory.yaml at the same time
+# against the same Deployment unless using a combined multi-metric HPA.
+# Delete the CPU HPA before applying this one.
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: php-apache-hpa-memory
+  namespace: autoscaling-demo
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: php-apache
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 120

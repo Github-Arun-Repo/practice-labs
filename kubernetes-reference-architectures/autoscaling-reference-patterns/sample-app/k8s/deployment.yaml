@@ -1,0 +1,50 @@
+# Sample application: registry.k8s.io/hpa-example
+#
+# This is the official Kubernetes HPA test application.
+# It runs an Apache PHP server that computes square roots in a loop on each request.
+# This makes it CPU-intensive per request — ideal for triggering HPA CPU-based scaling.
+#
+# Resource requests are intentionally set at 200m CPU so that even moderate
+# load brings average utilization above the 50% HPA threshold.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php-apache
+  namespace: autoscaling-demo
+  labels:
+    app: php-apache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: php-apache
+  template:
+    metadata:
+      labels:
+        app: php-apache
+    spec:
+      containers:
+        - name: php-apache
+          image: registry.k8s.io/hpa-example
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 20

@@ -55,13 +55,16 @@ We created this section to teach engineers how to design Kubernetes platforms th
 -> [Read Kubernetes architecture principles](#kubernetes-architecture-principles)
 
 **I want the implementation runbook now:**
--> [Open the Kubernetes runbook](./kubernetes-runbook.md)
+-> [Open the Kubernetes runbook index](./kubernetes-runbook.md)
 
 **I want to verify pre-requisites and tooling first:**
 -> [Open installation and prerequisites](./installation-kubernetes-prerequisites.md)
 
-**I want to start with multi-cluster strategy patterns:**
--> [Start with Multi-Cluster Strategy (Pattern 1)](./multi-cluster-strategy/README.md)
+**I want the multi-cluster strategy and shared-cluster multi-tenancy:**
+-> [Multi-Cluster Strategy (Pattern 1)](./multi-cluster-strategy/README.md)
+
+**I want to understand and run HPA and VPA autoscaling:**
+-> [Autoscaling Reference Patterns (Pattern 2)](./autoscaling-reference-patterns/README.md)
 
 ---
 
@@ -107,6 +110,7 @@ The patterns in this section are designed to close that gap by combining design 
 | Pattern | What It Demonstrates | Documentation |
 |---|---|---|
 | **Pattern 1: Multi-Cluster Strategy (Shared Cluster Multi-Tenancy Baseline)** | Multiple teams safely sharing one Kubernetes cluster using namespace isolation, quotas, limits, RBAC, network policies, service accounts, and secret boundaries. | [Explore pattern](./multi-cluster-strategy/README.md) |
+| **Pattern 2: Autoscaling Reference Patterns (HPA and VPA)** | Horizontal Pod Autoscaler (CPU-based scaling), Vertical Pod Autoscaler (resource right-sizing), load generation, live scaling observation, and failure scenarios. | [Explore pattern](./autoscaling-reference-patterns/README.md) |
 
 ---
 
@@ -124,6 +128,7 @@ The patterns in this section are designed to close that gap by combining design 
 
 - [Kubernetes runbook index](./kubernetes-runbook.md)
 - [Pattern 1 runbook: shared-cluster multi-tenancy](./multi-cluster-strategy/multi-cluster-runbook.md)
+- [Pattern 2 runbook: HPA and VPA autoscaling](./autoscaling-reference-patterns/autoscaling-runbook.md)
 
 ---
 
@@ -138,9 +143,24 @@ The patterns in this section are designed to close that gap by combining design 
 
 ---
 
+## Navigation
+
+| Section | Link |
+|---|---|
+| Pattern 1: Multi-Cluster Strategy | [README](./multi-cluster-strategy/README.md) · [Runbook](./multi-cluster-strategy/multi-cluster-runbook.md) |
+| Pattern 2: Autoscaling (HPA + VPA) | [README](./autoscaling-reference-patterns/README.md) · [Runbook](./autoscaling-reference-patterns/autoscaling-runbook.md) |
+| HPA deep dive | [HPA README](./autoscaling-reference-patterns/hpa/README.md) |
+| VPA deep dive | [VPA README](./autoscaling-reference-patterns/vpa/README.md) |
+| VPA Installation | [installation-vpa.md](./autoscaling-reference-patterns/vpa/installation-vpa.md) |
+| Prerequisites | [installation-kubernetes-prerequisites.md](./installation-kubernetes-prerequisites.md) |
+| Main repository | [README](../README.md) |
+
+---
+
 ## Next Patterns Planned
 
 - True multi-cluster fleet strategy (cluster-per-environment and cluster-per-business-domain)
 - Multi-cluster traffic management and failover
-- Cluster policy enforcement with admission controls
+- Cluster policy enforcement with admission controls (OPA/Gatekeeper, Kyverno)
 - Workload identity and secret externalization patterns
+- Custom metrics autoscaling (KEDA)

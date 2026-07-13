@@ -1,0 +1,39 @@
+# VPA — Auto mode (updateMode: "Auto")
+#
+# The VPA updater will RESTART pods to apply new resource recommendations.
+# Pods are evicted one at a time and recreated with updated requests/limits.
+#
+# WARNING: This will restart your pods. Use this only in non-production
+# or when the workload can tolerate pod restarts.
+#
+# NOTE: Do not use VPA Auto mode on the same resource dimension (cpu or memory)
+# as a concurrently active HPA. They conflict. Safe combination:
+#   - HPA on CPU + VPA on memory only (controlledResources: ["memory"])
+#   - Or VPA only (no HPA)
+#
+# Check applied resources on pods after VPA acts:
+#   kubectl get pod -n autoscaling-demo -l app=php-apache \
+#     -o custom-columns='NAME:.metadata.name,CPU-REQ:.spec.containers[0].resources.requests.cpu,MEM-REQ:.spec.containers[0].resources.requests.memory'
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: php-apache-vpa-auto
+  namespace: autoscaling-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: php-apache
+  updatePolicy:
+    updateMode: "Auto"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: php-apache
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi
+        maxAllowed:
+          cpu: "2"
+          memory: 2Gi
+        controlledResources: ["cpu", "memory"]

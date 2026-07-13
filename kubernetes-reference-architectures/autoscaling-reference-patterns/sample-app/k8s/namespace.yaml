@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autoscaling-demo
+  labels:
+    purpose: autoscaling-reference
+    pod-security.kubernetes.io/enforce: baseline

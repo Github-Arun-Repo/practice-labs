@@ -1,0 +1,36 @@
+# VPA — Recommendation-only mode (updateMode: "Off")
+#
+# The VPA recommender observes resource usage and produces recommendations.
+# With updateMode "Off", the VPA NEVER modifies running pods or restarts them.
+# It only populates the .status.recommendation field.
+#
+# This is the safe starting mode:
+# - Observe what VPA recommends vs what you set
+# - Use these recommendations to right-size future deployments
+# - No disruption to running workloads
+#
+# Check recommendations with:
+#   kubectl describe vpa php-apache-vpa-recommender -n autoscaling-demo
+
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: php-apache-vpa-recommender
+  namespace: autoscaling-demo
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: php-apache
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+      - containerName: php-apache
+        minAllowed:
+          cpu: 50m
+          memory: 64Mi
+        maxAllowed:
+          cpu: "2"
+          memory: 2Gi
+        controlledResources: ["cpu", "memory"]
