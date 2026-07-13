@@ -36,14 +36,6 @@ cli-demo/
 ## Installation: Deploy Argo CD
 
 Follow the complete installation and setup guide: **[installation-argocd.md](./installation-argocd.md)**
-
-That document covers:
-- Helm installation steps
-- CLI authentication
-- Repository access configuration
-- Post-installation setup
-- Production considerations
-
 After completing the installation, return here to continue with the demo.
 
 ---
