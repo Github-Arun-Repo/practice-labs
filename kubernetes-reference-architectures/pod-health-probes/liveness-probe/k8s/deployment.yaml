@@ -1,0 +1,61 @@
+# Correct use of a liveness probe: detect and recover from a stuck application.
+#
+# registry.k8s.io/liveness is the official Kubernetes probe example container.
+# It runs an HTTP server on port 8080 with a /healthz endpoint that:
+#   - Returns HTTP 200 for the first 10 seconds after container start
+#   - Returns HTTP 500 after 10 seconds (simulating a deadlock, OOM, or stuck goroutine)
+#
+# The liveness probe detects the 500 response and restarts the container.
+# The cycle then repeats: the restarted container runs for 10 seconds, then fails again.
+#
+# This is the RIGHT situation for a liveness probe:
+#   - The container process is still running (it didn't crash)
+#   - But the application is in a broken state it cannot self-recover from
+#   - Restarting the container is the correct response
+#
+# Watch: kubectl get pods -n liveness-demo -w
+# The RESTARTS counter increments roughly every 30-40 seconds.
+# Each restart is Kubernetes detecting and recovering from the broken state.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: liveness-demo
+  namespace: liveness-demo
+  labels:
+    app: liveness-demo
+    scenario: correct-use
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: liveness-demo
+  template:
+    metadata:
+      labels:
+        app: liveness-demo
+        scenario: correct-use
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/liveness
+          args:
+            - /server
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 3
+            # 3 failures × 5s = 15 seconds of grace before restart.
+            # The container fails at ~10s, so the pod restarts around t=25s.

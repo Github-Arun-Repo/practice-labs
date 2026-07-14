@@ -1,0 +1,65 @@
+# The PROBLEM: a slow-starting app with no startup probe and an aggressive liveness probe.
+#
+# This container sleeps for 45 seconds before nginx starts — simulating a real-world
+# slow-starting application: JVM loading classes, Spring Boot running schema migrations,
+# or a service waiting for configuration to be fetched at boot.
+#
+# The liveness probe starts checking at t=5s. It allows 3 consecutive failures
+# before killing the container. Each check is 5 seconds apart.
+#
+#   t=5s:  check 1 → FAIL (nginx not up yet, 40 more seconds to go)
+#   t=10s: check 2 → FAIL
+#   t=15s: check 3 → FAIL → container killed, pod restarts
+#
+# The pod never finishes starting. It enters a permanent restart loop.
+# Watch: kubectl get pods -n startup-demo -w
+# RESTARTS keeps incrementing. The app never actually serves traffic.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slow-app-no-startup-probe
+  namespace: startup-demo
+  labels:
+    app: slow-app-no-startup-probe
+    scenario: problem
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slow-app-no-startup-probe
+  template:
+    metadata:
+      labels:
+        app: slow-app-no-startup-probe
+        scenario: problem
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.24-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "App initializing — simulating 45-second startup delay..."
+              sleep 45
+              echo "Startup complete. Launching nginx."
+              exec nginx -g 'daemon off;'
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          # No startupProbe.
+          # Liveness fires at t=5s, fails 3 times by t=15s, kills the container.
+          # nginx starts at t=45s — it never gets there.

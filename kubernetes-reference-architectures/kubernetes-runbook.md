@@ -11,6 +11,7 @@ Current implementations available:
 - [Multi-Cluster Strategy: Shared Cluster Multi-Tenancy](./multi-cluster-strategy/multi-cluster-runbook.md)
 - [Autoscaling Reference Patterns: HPA and VPA](./autoscaling-reference-patterns/autoscaling-runbook.md)
 - [Zero-Downtime Deployment Strategies: Rolling Update, Blue/Green, Canary](./zero-downtime-deployment-strategies/zero-downtime-runbook.md)
+- [Pod Health Probes: Startup, Liveness, Readiness](./pod-health-probes/probes-runbook.md)
 
 ---
 

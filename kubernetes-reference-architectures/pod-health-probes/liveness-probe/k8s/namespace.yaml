@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: liveness-demo
+  labels:
+    purpose: probes-liveness
+    pod-security.kubernetes.io/enforce: baseline

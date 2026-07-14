@@ -1,0 +1,72 @@
+# Anti-pattern: using a liveness probe to check an external dependency.
+#
+# This deployment simulates the most common liveness probe mistake:
+# checking something the application CANNOT fix by restarting itself.
+#
+# The /tmp/healthy file represents an external dependency — a database connection,
+# a downstream API, a config service. A postStart hook creates it at startup.
+#
+# The liveness probe checks: does /tmp/healthy exist?
+#
+# The problem:
+#   1. External dependency goes down (kubectl exec to delete /tmp/healthy)
+#   2. Liveness probe fails
+#   3. Pod restarts — but the external dependency is still down
+#   4. Pod starts, postStart creates /tmp/healthy again, liveness passes
+#   5. Liveness checks the file again — but the actual external dep is still broken
+#   6. Meanwhile: the restart dropped all in-flight requests
+#   7. If many pods, they all restart simultaneously — thundering herd reconnection storm
+#
+# The correct fix: use a READINESS probe for external dependency health.
+# Readiness failure removes the pod from service (no new traffic) but does NOT restart.
+# The pod stays alive, retries the connection, and re-joins service when ready.
+#
+# This file is used in the runbook to demonstrate the anti-pattern.
+# Run: kubectl exec <pod> -n liveness-demo -- rm -f /tmp/healthy
+# Watch: kubectl get pods -n liveness-demo -w → RESTARTS goes up
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: liveness-anti-pattern
+  namespace: liveness-demo
+  labels:
+    app: liveness-anti-pattern
+    scenario: anti-pattern
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: liveness-anti-pattern
+  template:
+    metadata:
+      labels:
+        app: liveness-anti-pattern
+        scenario: anti-pattern
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.24-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "touch /tmp/healthy"]
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "test -f /tmp/healthy"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 2
+            # 2 failures × 5s = 10 seconds until restart.
+            # Delete /tmp/healthy → pod restarts in ~10 seconds.
+            # Compare: readiness-probe/k8s/deployment.yaml does the same check
+            # but with a readiness probe — no restart, just traffic removal.

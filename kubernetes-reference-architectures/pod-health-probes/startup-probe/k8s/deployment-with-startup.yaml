@@ -1,0 +1,82 @@
+# The SOLUTION: add a startup probe to protect slow-starting containers.
+#
+# The startup probe gives the container a startup window of up to 60 seconds
+# (failureThreshold: 12 × periodSeconds: 5 = 60s max).
+#
+# While the startup probe is running:
+#   - The liveness probe is DISABLED
+#   - The readiness probe is DISABLED
+#   - The container gets its full startup time without interference
+#
+# Once the startup probe passes (nginx answers HTTP on port 80 at ~t=45s):
+#   - The startup probe stops — it only runs until first success
+#   - The liveness probe activates and monitors from that point on
+#   - The readiness probe activates and the pod enters service
+#
+# Watch the difference:
+#   kubectl get pods -n startup-demo -w
+#   The RESTARTS counter stays at 0. The pod reaches Running/Ready after ~45 seconds.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slow-app-with-startup-probe
+  namespace: startup-demo
+  labels:
+    app: slow-app-with-startup-probe
+    scenario: solution
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slow-app-with-startup-probe
+  template:
+    metadata:
+      labels:
+        app: slow-app-with-startup-probe
+        scenario: solution
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.24-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              echo "App initializing — simulating 45-second startup delay..."
+              sleep 45
+              echo "Startup complete. Launching nginx."
+              exec nginx -g 'daemon off;'
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 12
+            periodSeconds: 5
+            # 12 × 5s = 60-second startup window.
+            # Liveness and readiness are completely disabled until this succeeds.
+            # Once nginx answers on port 80, startup probe passes and never runs again.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+            # Only activates after startup probe succeeds.
+            # Detects if nginx hangs or dies after it has started.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 5
+            failureThreshold: 3
+            # Only activates after startup probe succeeds.
+            # Controls when the pod appears in Service endpoints.

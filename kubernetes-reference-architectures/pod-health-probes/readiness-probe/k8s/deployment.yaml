@@ -1,0 +1,64 @@
+# Correct use of a readiness probe: control traffic without restarting the container.
+#
+# The readiness probe checks for /tmp/ready.
+# A postStart lifecycle hook creates this file at container start, so the pod
+# enters service automatically once the container initialises.
+#
+# The critical point: readiness failure removes the pod from Service endpoints.
+# It does NOT restart the container. The process stays running.
+#
+# This enables a range of scenarios:
+#   - Temporary overload: pod signals unready, traffic stops, pod catches up, re-joins
+#   - External dep down: pod signals unready, traffic stops, pod retries dep, re-joins
+#   - Graceful drain: signal unready before maintenance, wait for connections to complete
+#
+# Demo in the runbook:
+#   Delete /tmp/ready on one pod → watch that pod disappear from endpoints
+#   Other 2 pods absorb all traffic — no requests are dropped
+#   Create /tmp/ready again → pod re-joins endpoints
+#   RESTARTS stays at 0 throughout
+#
+# Compare with liveness-probe/k8s/deployment-anti-pattern.yaml:
+#   Same probe logic, but using livenessProbe → container restarts instead
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readiness-demo
+  namespace: readiness-demo
+  labels:
+    app: readiness-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: readiness-demo
+  template:
+    metadata:
+      labels:
+        app: readiness-demo
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.24-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "touch /tmp/ready"]
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "test -f /tmp/ready"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            failureThreshold: 2
+            # 2 failures × 5s = 10 seconds until pod is removed from endpoints.
+            # Pod removal is fast. Re-adding happens on the next passing check (5s).

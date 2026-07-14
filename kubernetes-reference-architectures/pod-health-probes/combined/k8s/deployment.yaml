@@ -1,0 +1,79 @@
+# Production-grade deployment with all three probes correctly configured.
+#
+# Each probe answers a different question and triggers a different action:
+#
+# startupProbe  → "Has the app finished starting?"
+#   Runs until first success. Liveness and readiness are disabled until it passes.
+#   Gives this app up to 30 seconds to become reachable on port 80 (6 × 5s).
+#   If the startup never completes: container is killed (same outcome as liveness failure).
+#
+# livenessProbe → "Is the app process alive and responding?"
+#   Runs continuously after startup succeeds. Checks HTTP every 10 seconds.
+#   Failure → container restart. Only use this for things a restart can fix.
+#   DO NOT check external databases or APIs here.
+#
+# readinessProbe → "Is the app ready to receive traffic right now?"
+#   Runs continuously after startup succeeds. Checks for /tmp/ready every 5 seconds.
+#   Failure → pod removed from Service endpoints. No restart. Process stays alive.
+#   Use this for: load-based circuit breaking, dependency health, graceful drain.
+#
+# postStart creates /tmp/ready so the pod enters service as soon as nginx starts.
+# To temporarily remove from service: kubectl exec <pod> -- rm /tmp/ready
+# To re-add to service: kubectl exec <pod> -- touch /tmp/ready
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: combined-demo
+  namespace: combined-demo
+  labels:
+    app: combined-demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: combined-demo
+  template:
+    metadata:
+      labels:
+        app: combined-demo
+    spec:
+      containers:
+        - name: app
+          image: nginx:1.24-alpine
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "touch /tmp/ready"]
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 6
+            periodSeconds: 5
+            # 6 × 5s = 30-second startup window.
+            # Appropriate for nginx (fast start). Increase for JVM apps.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            periodSeconds: 10
+            failureThreshold: 3
+            # 3 × 10s = 30 seconds before restart.
+            # Only checks HTTP — something nginx itself can fix by restarting.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "test -f /tmp/ready"]
+            periodSeconds: 5
+            failureThreshold: 2
+            # 2 × 5s = 10 seconds until removed from endpoints.
+            # Fast removal gives you a responsive circuit breaker.

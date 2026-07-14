@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: startup-demo
+  labels:
+    purpose: probes-startup
+    pod-security.kubernetes.io/enforce: baseline
