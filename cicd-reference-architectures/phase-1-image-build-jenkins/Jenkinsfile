@@ -41,18 +41,20 @@ pipeline {
             }
         }
 
-        stage('Code Quality Analysis') {
-            steps {
-                script {
-                    echo "Running SonarQube analysis..."
-                    dir('cicd-reference-architectures/sample-application') {
-                        withSonarQubeEnv("${SONARQUBE_SERVER}") {
-                            sh 'mvn sonar:sonar'
-                        }
-                    }
-                }
-            }
-        }
+        // stage('Code Quality Analysis') {
+        //     // Requires: SonarQube server + sonar Jenkins plugin (plugin ID: sonar)
+        //     // Skip this stage if SonarQube is not configured in your environment
+        //     steps {
+        //         script {
+        //             echo "Running SonarQube analysis..."
+        //             dir('cicd-reference-architectures/sample-application') {
+        //                 withSonarQubeEnv("${SONARQUBE_SERVER}") {
+        //                     sh 'mvn sonar:sonar'
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Build Application') {
             steps {
