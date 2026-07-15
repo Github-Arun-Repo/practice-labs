@@ -90,16 +90,19 @@ Login with:
 
 Navigate to: **Manage Jenkins → Plugins → Available Plugins**
 
-Install the following plugins:
+Search by the **Plugin ID** (shown in brackets) — it is the exact identifier and avoids confusion with similarly named plugins.
 
-| Plugin | Purpose |
-|--------|---------|
-| Docker Pipeline | Build and push Docker images |
-| Git | Clone repositories |
-| Pipeline | Declarative Pipeline support |
-| Credentials Binding | Inject secrets at runtime |
-| Blue Ocean (optional) | Modern pipeline UI |
-| SonarQube Scanner (optional) | Code quality integration |
+| Display Name (as shown in UI) | Plugin ID | Purpose |
+|-------------------------------|-----------|---------|
+| Pipeline | `workflow-aggregator` | Installs the full Declarative Pipeline suite including all sub-plugins |
+| Docker Pipeline | `docker-workflow` | `docker.build()` and `docker.withRegistry()` steps in Jenkinsfile |
+| Git | `git` | Clone Git repositories inside pipeline stages |
+| Credentials Binding | `credentials-binding` | Inject secrets via `withCredentials()` — never exposed in logs |
+| GitHub Integration | `github` | Webhook receiver for push-triggered builds |
+| Blue Ocean *(optional)* | `blueocean` | Modern visual pipeline UI |
+| SonarQube Scanner *(optional)* | `sonar` | `withSonarQubeEnv()` step for code quality analysis |
+
+> **Tip:** In the Available Plugins search box, paste the Plugin ID directly (e.g. `workflow-aggregator`) — it finds the exact plugin immediately without scrolling through similarly named results.
 
 Click **Install** and let Jenkins restart.
 
