@@ -90,19 +90,19 @@ Login with:
 
 Navigate to: **Manage Jenkins → Plugins → Available Plugins**
 
-Search by the **Plugin ID** (shown in brackets) — it is the exact identifier and avoids confusion with similarly named plugins.
+> **Important — Pipeline confusion:** When you search for "Pipeline" in the plugins list, Jenkins shows dozens of results: `Pipeline: API`, `Pipeline: Declarative`, `Pipeline: Job`, `Pipeline: Stage View`, and many more. **Do not install these individually.** Install only `workflow-aggregator` — it is the official bundle that pulls in all Pipeline sub-plugins as dependencies automatically. One install, everything included.
 
-| Display Name (as shown in UI) | Plugin ID | Purpose |
-|-------------------------------|-----------|---------|
-| Pipeline | `workflow-aggregator` | Installs the full Declarative Pipeline suite including all sub-plugins |
-| Docker Pipeline | `docker-workflow` | `docker.build()` and `docker.withRegistry()` steps in Jenkinsfile |
+For each plugin below, paste the **Plugin ID** directly into the search box — it finds the exact plugin immediately without scrolling through similarly named results.
+
+| Display Name (as shown in UI) | Plugin ID to search | Purpose |
+|-------------------------------|---------------------|---------|
+| Pipeline | `workflow-aggregator` | The full Declarative Pipeline bundle — installs all `Pipeline: *` sub-plugins automatically |
+| Docker Pipeline | `docker-workflow` | `docker.build()` and `docker.withRegistry()` steps in the Jenkinsfile |
 | Git | `git` | Clone Git repositories inside pipeline stages |
-| Credentials Binding | `credentials-binding` | Inject secrets via `withCredentials()` — never exposed in logs |
+| Credentials Binding | `credentials-binding` | Inject secrets via `withCredentials()` — credentials never appear in logs |
 | GitHub Integration | `github` | Webhook receiver for push-triggered builds |
 | Blue Ocean *(optional)* | `blueocean` | Modern visual pipeline UI |
 | SonarQube Scanner *(optional)* | `sonar` | `withSonarQubeEnv()` step for code quality analysis |
-
-> **Tip:** In the Available Plugins search box, paste the Plugin ID directly (e.g. `workflow-aggregator`) — it finds the exact plugin immediately without scrolling through similarly named results.
 
 Click **Install** and let Jenkins restart.
 
