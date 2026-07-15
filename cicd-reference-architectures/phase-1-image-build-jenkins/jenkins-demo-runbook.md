@@ -1,9 +1,8 @@
-# Jenkins Image Build Pipeline — Demo Runbook
+# Jenkins Image Build Pipeline — Runbook
 
 **Repo:** `https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git`
 **Base folder:** `cicd-reference-architectures/` (run commands from this folder)
 **Cluster:** Standalone K8s on EC2 · **Jenkins UI:** `http://<EC2-IP>:30080`
-**Presenter:** Arun
 
 ---
 
@@ -45,16 +44,17 @@ After completing installation, return here and continue with the pre-flight sect
 
 ## 0. PRE-FLIGHT
 
-Run these before starting the demo. Jenkins must already be installed.
+Run these checks before starting. Jenkins must already be installed and healthy.
 
 ```bash
-# local clone current?
+# Local clone current? Pull from repo root, then move into the working directory
 cd ~/platform-engineering-reference-architectures && git pull
+cd cicd-reference-architectures    # all commands below run from here
 
 # Jenkins pod running?
-kubectl get pods -n jenkins
+kubectl get pods -n jenkins        # expect Running 1/1
 
-# Jenkins accessible?
+# Jenkins UI accessible?
 curl -s -o /dev/null -w "%{http_code}" http://<EC2-IP>:30080/login
 # Expect: 200
 
@@ -69,11 +69,10 @@ docker info | grep "Server Version"
 **Timing plan:**
 - Installation (one-time): ≈ 15 min
 - Pre-flight: ≈ 3 min
-- Part 1 — Pipeline stages walkthrough: ≈ 20 min
+- Part 1 — Pipeline execution walkthrough: ≈ 20 min
 - Part 2 — Failure and recovery: ≈ 15 min
 - Part 3 — Operational patterns: ≈ 10 min
-- Q&A: ≈ 5 min
-- **Total demo time (without installation): ≈ 53 min**
+- **Total runbook time (without installation): ≈ 48 min**
 
 ---
 ---
@@ -82,19 +81,19 @@ docker info | grep "Server Version"
 
 > Goal: run the full pipeline end-to-end and understand what each stage does.
 
-## 1.1 — Inspect the Jenkinsfile Before Running
+## 1.1 — Read the Jenkinsfile Before Running
 
-**Say:** "Always read the pipeline before running it. The Jenkinsfile is code."
+Always read the pipeline before running it — the Jenkinsfile is code, not configuration.
 
 ```bash
 cat phase-1-image-build-jenkins/Jenkinsfile
 ```
 
-Point out:
-- `environment {}` block — centralized config, change once to affect everything
-- `options {}` block — build retention, timeout, timestamps
-- Stage order — tests before image build, scan before push
-- `post {}` block — success, failure, and cleanup handlers
+Notice the structure:
+- `environment {}` block — all image names, registry, and tags in one place; change once to affect every stage
+- `options {}` block — build retention, 30-minute timeout, timestamps on every log line
+- Stage order — tests before image build, scan before push (cheap checks first, expensive operations last)
+- `post {}` block — cleanup and notifications fire regardless of success or failure
 
 ## 1.2 — Trigger the First Build
 
@@ -103,43 +102,43 @@ In the Jenkins UI:
 2. Click **Build Now**
 3. Watch the **Stage View** update in real time
 
-While building, talk through each stage:
+As each stage runs, here is what is happening:
 
 ```
 [Checkout] Running...
   → Cloning the repository, checking out main branch
 
 [Build & Test] Running...
-  → mvn clean test — compiles and runs unit tests
-  → Fails here if any test fails (fail fast principle)
+  → mvn clean test — compiles and runs all unit tests
+  → Pipeline stops here if any test fails (fail fast — no broken code proceeds further)
 
 [Code Quality] Running...
-  → SonarQube static analysis (or skip message if not configured)
+  → SonarQube static analysis (or a skip message if SonarQube is not configured)
 
 [Build Application] Running...
   → mvn clean package -DskipTests
   → Produces: target/todo-app-0.0.1-SNAPSHOT.jar
 
 [Build Docker Image] Running...
-  → docker build (multi-stage)
-  → Two tags: todo-app:1 and todo-app:latest
+  → docker build using the multi-stage Dockerfile
+  → Two tags produced: todo-app:1 and todo-app:latest
 
 [Scan Docker Image] Running...
   → trivy image todo-app:1
-  → Reports CVEs; pipeline continues (warn-only in demo mode)
+  → Reports any CVEs found; pipeline continues in warn-only mode
 
 [Push to Registry] Running...
-  → docker login (credentials injected, never visible)
+  → docker login (credentials injected from Jenkins, never visible in logs)
   → docker push todo-app:1
   → docker push todo-app:latest
-  → docker logout
+  → docker logout immediately after
 
 [Update Deployment Manifests] Running...
   → Placeholder for Phase 2 ArgoCD integration
 ```
 
 ```bash
-# In the console output, look for:
+# In the console output, confirm:
 # "Building Docker image: arunrepo/todo-app:1"
 # "Successfully built ..."
 # "Image built and pushed: arunrepo/todo-app:1"
@@ -150,7 +149,7 @@ While building, talk through each stage:
 ## 1.3 — Inspect the Resulting Image
 
 ```bash
-# What image layers were built?
+# What images were built?
 docker images | grep todo-app
 
 # Inspect the image metadata
@@ -163,11 +162,11 @@ docker run --rm arunrepo/todo-app:1 whoami
 # Check health check config
 docker inspect arunrepo/todo-app:1 | jq '.[0].Config.Healthcheck'
 
-# Check image size (multi-stage = smaller)
+# Check image size — multi-stage keeps it small
 docker images arunrepo/todo-app:1 --format "Size: {{.Size}}"
 ```
 
-👉 Image runs as `appuser`. Health check configured. Size ~180MB — compare to `eclipse-temurin:21-jdk-alpine` at ~330MB — build tools excluded.
+👉 Image runs as `appuser`. Health check is configured. Size is ~180MB compared to `eclipse-temurin:21-jdk-alpine` at ~330MB — the build tools are excluded from the final image by the multi-stage build.
 
 ## 1.4 — Run the Image Locally
 
@@ -191,20 +190,22 @@ curl -s http://localhost:8080/api/todos | jq .
 docker stop todo-demo && docker rm todo-demo
 ```
 
-👉 Proves the image is functional — not just built and pushed.
+👉 The image is functional — not just built and pushed. Running it locally is the fastest way to confirm the artifact is correct before it reaches any environment.
 
 ## 1.5 — Inspect Build Artifacts and History
 
 In the Jenkins UI:
-- Open the build → **Console Output** (full log, every command, every line)
-- Back to job → **Stage View** (visual pipeline with per-stage timing)
-- **Build Artifacts** section — JAR file archived from the post block
+- Open the build → **Console Output** — full log, every command, every line, timestamped
+- Back to job → **Stage View** — visual pipeline with per-stage timing
+- **Build Artifacts** section — the JAR file archived from the `post` block
 
 ```bash
-# From CLI — Jenkins REST API
+# Jenkins REST API — query the build result
 curl -s "http://<EC2-IP>:30080/job/todo-app-image-build/1/api/json" | jq '.result,.duration'
 # Expect: "SUCCESS" and duration in milliseconds
 ```
+
+👉 Every build is queryable via the API. Build number → Jenkins URL → console output → Git commit. The full audit trail exists without any extra tooling.
 
 ---
 ---
@@ -215,10 +216,10 @@ curl -s "http://<EC2-IP>:30080/job/todo-app-image-build/1/api/json" | jq '.resul
 
 ## 2.1 — Failing Test (Stage 2 Fail Fast)
 
-**Say:** "The most common pipeline failure: a developer pushes broken code. Let's see what happens."
+The most common pipeline failure is a developer pushing broken code. Let's see exactly what happens.
 
 ```bash
-# Break a test — edit the controller to break compilation
+# Break a test — edit the controller to return null
 cd ~/platform-engineering-reference-architectures
 sed -i 's/return ResponseEntity.ok(todos);/return ResponseEntity.ok(null);/' \
   cicd-reference-architectures/sample-application/src/main/java/com/example/app/TodoController.java
@@ -226,17 +227,17 @@ sed -i 's/return ResponseEntity.ok(todos);/return ResponseEntity.ok(null);/' \
 git add -A && git commit -m "break: return null from controller (demo)" && git push
 ```
 
-Trigger a build or wait for webhook. In the Stage View:
+Trigger a build. In the Stage View:
 
 ```
 [Checkout]        ✅
 [Build & Test]    ❌ FAILED
 ```
 
-👉 Pipeline stops at stage 2. Stages 3–8 (Docker build, scan, push) never execute. Cost: 30–60 seconds wasted, not 5 minutes.
+👉 The pipeline stops at stage 2. Stages 3–8 (Docker build, scan, push) never execute. A broken image never reaches the registry. The cost is 30–60 seconds of CI time, not a bad image in production.
 
 ```bash
-# In console output, look for:
+# In the console output, look for:
 # "BUILD FAILURE"
 # "Tests run: X, Failures: Y"
 
@@ -246,64 +247,51 @@ git revert --no-edit HEAD && git push
 
 Trigger another build — back to green.
 
-**Key point:** "Fail fast protects your registry from broken images. A broken image in production is worse than a failed build."
+## 2.2 — Build Succeeds, Container Crashes (Pipeline Success ≠ App Health)
 
-## 2.2 — Build Succeeds, Deployment Breaks (Sync vs Health)
-
-**Say:** "Build passes, image is in the registry — but does it actually run?"
+The pipeline passes and the image is in the registry — but does the container actually run?
 
 ```bash
-# Inject a bad image reference into the Dockerfile ENTRYPOINT to simulate a runtime failure
-# (This would result in a build that succeeds but the container crashes immediately)
-# Instead demonstrate with a bad environment variable approach:
-
+# Simulate a runtime crash — JVM OOM at startup
 docker run --rm -e JAVA_TOOL_OPTIONS="-Xmx1m" arunrepo/todo-app:1
-# Container starts but JVM crashes immediately with OOM
+# Container starts but JVM crashes immediately
 
-# Verify health check would catch it
+# Run it with a health check to see the health status
 docker run -d --name todo-broken \
   -e JAVA_TOOL_OPTIONS="-Xmx1m" \
   -p 8081:8080 arunrepo/todo-app:1
 
 sleep 15
 docker inspect todo-broken | jq '.[0].State.Health.Status'
-# Expect: "unhealthy" — the health check fires and marks the container unhealthy
+# Expect: "unhealthy"
 
 docker stop todo-broken && docker rm todo-broken
 ```
 
-👉 **The pipeline produced a valid image** (build passed). But the container is unhealthy at runtime. This is the distinction: **pipeline success ≠ application success**. This is exactly the gap that Kubernetes liveness and readiness probes + ArgoCD health checks address (Phase 2).
+👉 The pipeline produced a valid image — the build was correct. But the container is unhealthy at runtime. This is the distinction between **pipeline success** and **application health**. This exact gap is what Kubernetes liveness/readiness probes and ArgoCD health checks address — covered in Phase 2.
 
-## 2.3 — Trivy Finds a Vulnerability (Scan Failure)
-
-**Say:** "Let's see what happens when the CVE scanner flags an issue."
+## 2.3 — Trivy Finds a Vulnerability (Scan Stage)
 
 ```bash
-# Check what Trivy finds in the current image
+# Run Trivy manually against the built image
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   aquasec/trivy image --severity HIGH,CRITICAL arunrepo/todo-app:1
-
-# If vulnerabilities found, output shows:
-# ┌──────────────┬────────────────┬──────────┬──────────────────┐
-# │   Library    │ Vulnerability  │ Severity │ Fixed Version    │
-# └──────────────┴────────────────┴──────────┴──────────────────┘
 ```
 
-**Say:** "If the Jenkinsfile were configured to `exit 1` on scan failure:"
+👉 If vulnerabilities are found, Trivy reports the library, CVE ID, severity, and the fixed version. In the current Jenkinsfile the scan is warn-only — the pipeline continues. To make the pipeline fail and block the push on a HIGH/CRITICAL CVE, change the scan step to:
 
 ```groovy
-// In Jenkinsfile, to make scan fail the build:
 sh '''
     trivy image --severity HIGH,CRITICAL --exit-code 1 ${IMAGE_NAME}:${IMAGE_TAG}
 '''
 ```
 
-👉 "The pipeline would stop before push. A vulnerable image never reaches the registry. This is supply chain security in practice."
+With `--exit-code 1`, a vulnerable image never reaches the registry. This is supply chain security enforced at the pipeline level.
 
 ## 2.4 — Registry Push Failure (Wrong Credentials)
 
-**Say:** "What if the Docker credentials are wrong or expired?"
+What happens if the Docker credentials are wrong or expired?
 
 In Jenkins UI:
 1. Go to **Manage Jenkins → Credentials**
@@ -320,92 +308,89 @@ In Jenkins UI:
 [Push to Registry]     ❌ FAILED — "unauthorized: authentication required"
 ```
 
-👉 All stages before push succeeded (image was built, tested, scanned). Only push failed. Restore correct credentials, re-trigger — push succeeds without rebuilding the image.
-
-**Key point:** "The pipeline is idempotent in failures. Fix the credential, retry — no need to rebuild from scratch."
+👉 All stages before the push succeeded — the image was built, tested, and scanned. Only the push failed. Restore the correct credentials and re-trigger the build. The pipeline picks up at the failed stage without rebuilding the image from scratch.
 
 ---
 ---
 
 # PART 3 — Operational Patterns (≈10 min)
 
-## 3.1 — Triggering a Second Build (Increment)
+## 3.1 — Triggering a Second Build (Immutable Versioning)
 
-**Say:** "Every commit produces a new versioned artifact."
+Every commit produces a new, independently versioned image artifact.
 
 ```bash
-# Change the application version in pom.xml
+# Bump the application version
 sed -i 's/version>0.0.1-SNAPSHOT/version>0.0.2-SNAPSHOT/' \
   cicd-reference-architectures/sample-application/pom.xml
 
 git add -A && git commit -m "bump version to 0.0.2-SNAPSHOT" && git push
 ```
 
-After build completes:
+After the build completes:
 
 ```bash
-# Two versions now in Docker
 docker images | grep todo-app
-# todo-app:1   (old build)
-# todo-app:2   (new build)
+# todo-app:1        (build 1 — still exists)
+# todo-app:2        (build 2 — new artifact)
 # todo-app:latest   (points to build 2)
 ```
 
-👉 "Build 2 is a new immutable artifact. Build 1 still exists. You can always roll back to build 1 by deploying that image."
+👉 Build 2 is a new immutable artifact. Build 1 is unchanged and still pullable. Rolling back is just redeploying the earlier image tag — no rebuild required.
 
 ## 3.2 — Build History and Traceability
 
 ```bash
-# Jenkins REST API — list recent builds
+# List recent builds via Jenkins REST API
 curl -s "http://<EC2-IP>:30080/job/todo-app-image-build/api/json?tree=builds[number,result,timestamp]" \
   | jq '.builds[] | {build: .number, result: .result}'
 
-# Correlate a build number to a Git commit
+# Trace a build number back to its Git commit
 curl -s "http://<EC2-IP>:30080/job/todo-app-image-build/2/api/json" \
   | jq '.actions[] | select(._class | contains("RevisionParameterAction")) | .parameters'
 ```
 
-👉 "Build number → Jenkins URL → Git commit. Every deployed image is traceable to the exact commit that produced it."
+👉 Build number → Jenkins URL → Git commit. Every image in the registry is traceable to the exact commit that produced it. This traceability is the foundation of safe rollbacks and incident investigations.
 
 ## 3.3 — Webhook-Triggered Build (Automatic CI)
 
+Configure GitHub to trigger builds automatically on every push — no manual click, no polling.
+
 In GitHub:
-1. Go to Repository → Settings → Webhooks
+1. Go to Repository → **Settings → Webhooks**
 2. Add webhook: `http://<EC2-IP>:30080/github-webhook/`
 3. Content type: `application/json`
-4. Events: Push
+4. Events: **Push**
 
 ```bash
-# Test it — make a small change
-echo "# demo webhook" >> cicd-reference-architectures/sample-application/README.md
+# Test the webhook — make a small change and push
+echo "# webhook test" >> cicd-reference-architectures/sample-application/README.md
 git add -A && git commit -m "test webhook trigger" && git push
 ```
 
-👉 In the Jenkins UI, build starts within seconds of the push — no polling, no manual click.
-
-**Say:** "This is the CI in CI/CD. Every push to `main` automatically tests, builds, scans, and publishes an image. The developer's work ends at `git push`."
+👉 In the Jenkins UI, a build starts within seconds of the push — no polling delay, no manual action. Every push to `main` automatically tests, builds, scans, and publishes a versioned image. The developer's work ends at `git push`.
 
 ---
 ---
 
-## RESET (after demo / to rehearse again)
+## RESET (clean slate to repeat or restart)
 
 ```bash
 # Remove local demo images
 docker rmi arunrepo/todo-app:1 arunrepo/todo-app:2 arunrepo/todo-app:latest 2>/dev/null || true
 
-# Revert any pom.xml or code changes made during demo
+# Revert any code changes made during the runbook
 cd ~/platform-engineering-reference-architectures
 git checkout cicd-reference-architectures/sample-application/pom.xml
 git checkout cicd-reference-architectures/sample-application/src/
 
-# Optionally delete the Jenkins job build history via UI:
-# Jenkins → todo-app-image-build → Delete Build History
+# Optionally clear Jenkins build history:
+# Jenkins UI → todo-app-image-build → Delete Build History
 ```
 
 ---
 
-## Command Cheat-Sheet (keep on screen during Q&A)
+## Command Cheat-Sheet
 
 | Intent | Command |
 |---|---|
@@ -415,14 +400,7 @@ git checkout cicd-reference-architectures/sample-application/src/
 | Trigger build (API) | `curl -X POST http://<IP>:30080/job/<job>/build --user admin:<token>` |
 | Check image locally | `docker run --rm -p 8080:8080 <image>:<tag>` |
 | Scan image locally | `trivy image --severity HIGH,CRITICAL <image>:<tag>` |
-| Inspect image | `docker inspect <image>:<tag> | jq '.[0].Config'` |
+| Inspect image | `docker inspect <image>:<tag> \| jq '.[0].Config'` |
 | View image layers | `docker history <image>:<tag>` |
 | Check non-root user | `docker run --rm <image>:<tag> whoami` |
 | Jenkins logs | `kubectl logs -n jenkins <pod>` |
-
-**Things to reinforce throughout demo:**
-1. The Jenkinsfile is code — version control it
-2. Fail fast — cheap checks first, expensive operations last
-3. Credentials never in Git or visible in logs
-4. Multi-stage Docker = smaller images, fewer CVEs
-5. Build number + registry = rollback is just redeploy of an older tag
