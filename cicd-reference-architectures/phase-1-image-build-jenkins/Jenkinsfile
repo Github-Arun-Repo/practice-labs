@@ -14,7 +14,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"
         LATEST_TAG = 'latest'
         GIT_REPO = 'https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git'
-        GITHUB_CREDENTIALS_ID = 'github-credentials'
+        GITHUB_CREDENTIALS_ID = 'github-arun-repository'
         DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
         SECURITY_REPORT_DIR = 'security-reports'
         SONARQUBE_SERVER = 'SonarQube'  // Configure in Jenkins
