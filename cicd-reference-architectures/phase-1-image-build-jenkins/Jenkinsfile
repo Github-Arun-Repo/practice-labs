@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        PIPELINE_VERSION = 'security-reports-gitleaks-v1-2026-07-16'
+        PIPELINE_VERSION = 'security-reports-owasp-v1-2026-07-16'
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
         IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -147,6 +147,45 @@ pipeline {
             }
         }
 
+        stage('OWASP Dependency Check') {
+            steps {
+                container('maven') {
+                    script {
+                        echo "Running OWASP Dependency-Check for application dependencies..."
+                        // Reporting mode for now: always produce artifacts; do not gate build here.
+                        sh '''
+                            mkdir -p ${SECURITY_REPORT_DIR}
+                            rm -f ${SECURITY_REPORT_DIR}/dependency-check-report.html ${SECURITY_REPORT_DIR}/dependency-check-report.json
+
+                            set +e
+                            cd cicd-reference-architectures/sample-application
+                            mvn -B org.owasp:dependency-check-maven:10.0.4:check \
+                                -Dformats=HTML,JSON \
+                                -DoutputDirectory=../../${SECURITY_REPORT_DIR} \
+                                -DfailBuildOnCVSS=11
+                            DEP_CHECK_STATUS=$?
+                            set -e
+
+                            if [ ! -s ${SECURITY_REPORT_DIR}/dependency-check-report.json ]; then
+                                echo '{"dependencies":[],"vulnerabilities":[],"note":"No OWASP report generated"}' > ${SECURITY_REPORT_DIR}/dependency-check-report.json
+                            fi
+
+                            if [ ! -s ${SECURITY_REPORT_DIR}/dependency-check-report.html ]; then
+                                cat > ${SECURITY_REPORT_DIR}/dependency-check-report.html <<EOF
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>OWASP Dependency-Check Report</title></head>
+<body><h1>OWASP Dependency-Check Report</h1><p>No report generated in this build.</p></body></html>
+EOF
+                            fi
+
+                            echo "OWASP Dependency-Check completed with status ${DEP_CHECK_STATUS}"
+                            wc -c ${SECURITY_REPORT_DIR}/dependency-check-report.json ${SECURITY_REPORT_DIR}/dependency-check-report.html
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Scan Repository Secrets') {
             steps {
                 container('maven') {
@@ -278,6 +317,8 @@ EOF
                                     mkdir -p ${SECURITY_REPORT_DIR}
                                     test -f ${SECURITY_REPORT_DIR}/trivy-report.json || echo '{}' > ${SECURITY_REPORT_DIR}/trivy-report.json
                                     test -f ${SECURITY_REPORT_DIR}/trivy-report.html || echo '<html><body><h1>No Trivy report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/trivy-report.html
+                                    test -f ${SECURITY_REPORT_DIR}/dependency-check-report.json || echo '{"dependencies":[],"vulnerabilities":[],"note":"No OWASP report generated"}' > ${SECURITY_REPORT_DIR}/dependency-check-report.json
+                                    test -f ${SECURITY_REPORT_DIR}/dependency-check-report.html || echo '<html><body><h1>No OWASP report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/dependency-check-report.html
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-report.json || echo '[]' > ${SECURITY_REPORT_DIR}/gitleaks-report.json
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-report.html || echo '<html><body><h1>No Gitleaks report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/gitleaks-report.html
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt || echo '2' > ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
@@ -286,6 +327,8 @@ EOF
                                     mkdir -p docs/security-reports
                                     cp ${SECURITY_REPORT_DIR}/trivy-report.html docs/security-reports/trivy-report.html
                                     cp ${SECURITY_REPORT_DIR}/trivy-report.json docs/security-reports/trivy-report.json
+                                    cp ${SECURITY_REPORT_DIR}/dependency-check-report.html docs/security-reports/dependency-check-report.html
+                                    cp ${SECURITY_REPORT_DIR}/dependency-check-report.json docs/security-reports/dependency-check-report.json
                                     cp ${SECURITY_REPORT_DIR}/gitleaks-report.html docs/security-reports/gitleaks-report.html
                                     cp ${SECURITY_REPORT_DIR}/gitleaks-report.json docs/security-reports/gitleaks-report.json
                                     printf '{"build":"%s","timestamp":"%s"}' "${BUILD_NUMBER}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > docs/security-reports/build-meta.json
@@ -298,14 +341,16 @@ EOF
                                     export GIT_SSH_COMMAND="ssh -i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
                                         git add ${SECURITY_REPORT_DIR}/trivy-report.json ${SECURITY_REPORT_DIR}/trivy-report.html \
+                                            ${SECURITY_REPORT_DIR}/dependency-check-report.json ${SECURITY_REPORT_DIR}/dependency-check-report.html \
                                             ${SECURITY_REPORT_DIR}/gitleaks-report.json ${SECURITY_REPORT_DIR}/gitleaks-report.html ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt \
                                             docs/security-reports/trivy-report.html docs/security-reports/trivy-report.json \
+                                            docs/security-reports/dependency-check-report.html docs/security-reports/dependency-check-report.json \
                                             docs/security-reports/gitleaks-report.html docs/security-reports/gitleaks-report.json docs/security-reports/build-meta.json
 
                                     if git diff --staged --quiet; then
                                         echo "No security report changes to commit"
                                     else
-                                        git commit -m "chore(security): update trivy reports for build ${BUILD_NUMBER} [skip ci]"
+                                        git commit -m "chore(security): update security reports for build ${BUILD_NUMBER} [skip ci]"
                                         git push git@github.com:Github-Arun-Repo/platform-engineering-reference-architectures.git HEAD:main
                                     fi
                                 '''
@@ -373,12 +418,21 @@ EOF
             script {
                 echo "Pipeline execution completed"
                 // Archive build artifacts if needed
-                archiveArtifacts artifacts: 'cicd-reference-architectures/sample-application/target/**/*.jar,security-reports/trivy-report.json,security-reports/trivy-report.html,security-reports/gitleaks-report.json,security-reports/gitleaks-report.html,security-reports/gitleaks-exit-code.txt', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'cicd-reference-architectures/sample-application/target/**/*.jar,security-reports/trivy-report.json,security-reports/trivy-report.html,security-reports/dependency-check-report.json,security-reports/dependency-check-report.html,security-reports/gitleaks-report.json,security-reports/gitleaks-report.html,security-reports/gitleaks-exit-code.txt', allowEmptyArchive: true
 
                 publishHTML(target: [
                     reportDir: 'security-reports',
                     reportFiles: 'trivy-report.html',
                     reportName: 'Trivy CVE Report',
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: true
+                ])
+
+                publishHTML(target: [
+                    reportDir: 'security-reports',
+                    reportFiles: 'dependency-check-report.html',
+                    reportName: 'OWASP Dependency-Check Report',
                     keepAll: true,
                     alwaysLinkToLastBuild: true,
                     allowMissing: true
