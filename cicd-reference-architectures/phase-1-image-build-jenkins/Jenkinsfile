@@ -1,18 +1,19 @@
 pipeline {
-        agent {
-                kubernetes {
-                        label 'todo-app'
-                        defaultContainer 'maven'
-                                                yamlFile 'cicd-reference-architectures/phase-1-image-build-jenkins/pod-template.yaml'
-                }
+    agent {
+        kubernetes {
+            label 'todo-app'
+            defaultContainer 'maven'
+            yamlFile 'cicd-reference-architectures/phase-1-image-build-jenkins/pod-template.yaml'
         }
+    }
 
     environment {
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
-        IMAGE_NAME = 'arunrepo/todo-app'
+        IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
         LATEST_TAG = 'latest'
         GIT_REPO = 'https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git'
+        GITHUB_CREDENTIALS_ID = 'github-credentials'
         SONARQUBE_SERVER = 'SonarQube'  // Configure in Jenkins
     }
 
@@ -31,7 +32,7 @@ pipeline {
                 checkout([
                     $class: 'GitSCM',
                     branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: "${GIT_REPO}"]]
+                    userRemoteConfigs: [[url: "${GIT_REPO}", credentialsId: "${GITHUB_CREDENTIALS_ID}"]]
                 ])
             }
         }
@@ -118,7 +119,7 @@ pipeline {
                 container('docker') {
                     script {
                         echo "Pushing Docker image to registry..."
-                        withCredentials([usernamePassword(credentialsId: 'docker-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                             sh '''
                                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                                 docker push ${IMAGE_NAME}:${IMAGE_TAG}

@@ -139,30 +139,55 @@ kubectl patch deployment jenkins -n jenkins --type=json -p='[
 
 Use a dedicated Docker-in-Docker agent pod. Configure under: Manage Jenkins → Clouds → Kubernetes → Pod Templates.
 
-### 8. Add Docker Registry Credentials
+### 8. Add Docker Hub Credentials (Required for Push)
 
+First create a Docker Hub access token:
+1. Open Docker Hub → **Account Settings → Personal access tokens**
+2. Create token (read/write scope for push)
+3. Copy the token value (shown once)
+
+Now add it in Jenkins:
 Navigate to: **Manage Jenkins → Credentials → System → Global credentials → Add credentials**
 
 | Field | Value |
 |-------|-------|
 | Kind | Username with password |
-| Username | Your Docker Hub / registry username |
-| Password | Docker Hub Personal Access Token (not password) |
-| ID | `docker-credentials` |
-| Description | Docker registry credentials |
+| Username | Your Docker Hub username |
+| Password | Docker Hub access token |
+| ID | `dockerhub-credentials` |
+| Description | Docker Hub push credentials |
 
-### 9. Configure Git Repository Access
+### 9. Add GitHub Credentials (Required for SCM Checkout)
 
-If the repository is private, add Git credentials:
-
+Add credentials in Jenkins:
 Navigate to: **Manage Jenkins → Credentials → System → Global credentials → Add credentials**
+
+Use one of the following patterns:
+
+**Option A (recommended for this runbook): HTTPS + PAT**
+1. In GitHub, create token: **Settings → Developer settings → Personal access tokens**
+2. Grant repo read access to the target repository
+3. In Jenkins add:
 
 | Field | Value |
 |-------|-------|
-| Kind | Username with password (HTTPS) or SSH Username with private key (SSH) |
+| Kind | Username with password |
 | Username | GitHub username |
-| Password / Private Key | GitHub Personal Access Token or SSH key |
+| Password | GitHub PAT |
 | ID | `github-credentials` |
+| Description | GitHub HTTPS credentials |
+
+**Option B: SSH key**
+1. Add your public key to GitHub account/repo deploy keys
+2. In Jenkins add:
+
+| Field | Value |
+|-------|-------|
+| Kind | SSH Username with private key |
+| Username | `git` |
+| Private Key | matching private key |
+| ID | `github-credentials` |
+| Description | GitHub SSH credentials |
 
 ### 10. Create the Pipeline Job
 
@@ -173,7 +198,8 @@ Navigate to: **Manage Jenkins → Credentials → System → Global credentials 
 5. In configuration:
    - Under **Pipeline** → Definition: choose **Pipeline script from SCM**
    - SCM: **Git**
-   - Repository URL: `https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git`
+  - Repository URL: `https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures.git` (or SSH URL if using SSH credentials)
+  - Credentials: select **`github-credentials`**
    - Branch: `*/main`
    - Script Path: `cicd-reference-architectures/phase-1-image-build-jenkins/Jenkinsfile`
 6. Click **Save**

@@ -46,6 +46,11 @@ After completing installation, return here and continue with the pre-flight sect
 
 Run these checks before starting. Jenkins must already be installed and healthy.
 
+Credential prerequisites (mandatory):
+- Jenkins credential `github-credentials` exists and has read access to the GitHub repository used by the job
+- Jenkins credential `dockerhub-credentials` exists and has push access to Docker Hub repo `agovindasamy/arun`
+- Job SCM configuration uses credential `github-credentials`
+
 ```bash
 # Local clone current? Pull from repo root, then move into the working directory
 cd ~/platform-engineering-reference-architectures && git pull
@@ -63,7 +68,9 @@ docker version
 docker info | grep "Server Version"
 
 # Credentials configured?
-# Check Jenkins UI → Manage Jenkins → Credentials → docker-credentials exists
+# Check Jenkins UI → Manage Jenkins → Credentials:
+#   - github-credentials
+#   - dockerhub-credentials
 ```
 
 **Timing plan:**

@@ -187,7 +187,7 @@ IMAGE_TAG = "${BUILD_NUMBER}-${GIT_COMMIT[0..7]}"  // e.g. 42-abc1234
 ### Credential Handling
 
 ```groovy
-withCredentials([usernamePassword(credentialsId: 'docker-credentials',
+withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials',
                                    usernameVariable: 'DOCKER_USER',
                                    passwordVariable: 'DOCKER_PASS')]) {
     sh 'echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin'
