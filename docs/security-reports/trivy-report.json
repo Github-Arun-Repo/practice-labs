@@ -1,14 +1,14 @@
 {
   "SchemaVersion": 2,
-  "CreatedAt": "2026-07-16T20:03:58.39554013Z",
-  "ArtifactName": "agovindasamy/arun:25",
+  "CreatedAt": "2026-07-16T20:23:36.06396385Z",
+  "ArtifactName": "agovindasamy/arun:27",
   "ArtifactType": "container_image",
   "Metadata": {
     "OS": {
       "Family": "alpine",
       "Name": "3.23.5"
     },
-    "ImageID": "sha256:dcfa9ef50694a20898ceeb7cb2bf52eeee47232a5aa2f626058c42a8548eb347",
+    "ImageID": "sha256:c96c6da622efb148cdf6df2356ddf14e31c8dc66a9e18dd8451227265a590b25",
     "DiffIDs": [
       "sha256:31ad4a471c6852bfec14d757cc75a566c82a9769f12c3918cf6bf52cc0eeb3d0",
       "sha256:751fe7c90841e5c1a9f465ef72cd52a86d5b6ebaa5cd2491cac866d856e12c07",
@@ -22,11 +22,11 @@
       "sha256:76e1cb247badd5ae23a7c6f7350a577418d98fec0e9335e02e949ab1b9217338"
     ],
     "RepoTags": [
-      "agovindasamy/arun:25",
+      "agovindasamy/arun:27",
       "agovindasamy/arun:latest"
     ],
     "RepoDigests": [
-      "agovindasamy/arun@sha256:dcfa9ef50694a20898ceeb7cb2bf52eeee47232a5aa2f626058c42a8548eb347"
+      "agovindasamy/arun@sha256:c96c6da622efb148cdf6df2356ddf14e31c8dc66a9e18dd8451227265a590b25"
     ],
     "ImageConfig": {
       "architecture": "amd64",
@@ -191,7 +191,7 @@
   },
   "Results": [
     {
-      "Target": "agovindasamy/arun:25 (alpine 3.23.5)",
+      "Target": "agovindasamy/arun:27 (alpine 3.23.5)",
       "Class": "os-pkgs",
       "Type": "alpine",
       "Vulnerabilities": [
