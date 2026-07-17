@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        PIPELINE_VERSION = 'security-reports-grype-sbom-gate-v1-2026-07-17'
+        PIPELINE_VERSION = 'quality-trivy-fs-jacoco-v1-2026-07-17'
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
         IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -49,33 +49,27 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        stage('Unit Tests & Code Coverage') {
             steps {
                 container('maven') {
                     script {
-                        echo "Building and testing TODO application..."
+                        echo "Running unit tests and generating JaCoCo coverage..."
                         dir('cicd-reference-architectures/sample-application') {
-                            sh 'mvn clean test'
+                            sh 'mvn -B clean verify'
                         }
                     }
                 }
             }
         }
 
-        // stage('Code Quality Analysis') {
-        //     // Requires: SonarQube server + sonar Jenkins plugin (plugin ID: sonar)
-        //     // Skip this stage if SonarQube is not configured in your environment
-        //     steps {
-        //         script {
-        //             echo "Running SonarQube analysis..."
-        //             dir('cicd-reference-architectures/sample-application') {
-        //                 withSonarQubeEnv("${SONARQUBE_SERVER}") {
-        //                     sh 'mvn sonar:sonar'
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
+        stage('SonarQube Analysis Placeholder') {
+            when {
+                expression { return false }
+            }
+            steps {
+                echo "SonarQube analysis is intentionally disabled for now. Configure ${SONARQUBE_SERVER} and enable this stage later."
+            }
+        }
 
         stage('Build Application') {
             steps {
@@ -83,7 +77,7 @@ pipeline {
                     script {
                         echo "Packaging Spring Boot application..."
                         dir('cicd-reference-architectures/sample-application') {
-                            sh 'mvn clean package -DskipTests'
+                            sh 'mvn -B package -DskipTests'
                         }
                     }
                 }
@@ -395,6 +389,74 @@ EOF
             }
         }
 
+        stage('Scan Filesystem with Trivy') {
+            steps {
+                container('docker') {
+                    script {
+                        echo "Scanning application filesystem with Trivy..."
+                        sh '''
+                            mkdir -p ${SECURITY_REPORT_DIR}
+                            rm -f ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
+
+                            SCAN_CONTAINER="trivy-fs-${BUILD_NUMBER}"
+                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+
+                            docker create \
+                                --name "${SCAN_CONTAINER}" \
+                                -v trivy-fs-cache:/root/.cache/ \
+                                --entrypoint sh \
+                                aquasec/trivy:0.57.1 \
+                                -c 'sleep 300'
+
+                            docker cp cicd-reference-architectures/sample-application/. "${SCAN_CONTAINER}:/scan"
+                            docker start "${SCAN_CONTAINER}" >/dev/null
+
+                            set +e
+                            docker exec "${SCAN_CONTAINER}" trivy fs \
+                                --format json \
+                                --severity LOW,MEDIUM,HIGH,CRITICAL \
+                                --scanners vuln,secret,misconfig \
+                                --ignore-unfixed=false \
+                                --timeout 10m \
+                                --quiet \
+                                /scan \
+                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.json 2>/dev/null
+                            TRIVY_FS_JSON_STATUS=$?
+
+                            docker exec "${SCAN_CONTAINER}" trivy fs \
+                                --format template \
+                                --template '@/contrib/html.tpl' \
+                                --severity LOW,MEDIUM,HIGH,CRITICAL \
+                                --scanners vuln,secret,misconfig \
+                                --ignore-unfixed=false \
+                                --timeout 10m \
+                                --quiet \
+                                /scan \
+                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.html 2>/dev/null
+                            TRIVY_FS_HTML_STATUS=$?
+                            set -e
+
+                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+
+                            if [ "${TRIVY_FS_JSON_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.json ]; then
+                                echo '{}' > ${SECURITY_REPORT_DIR}/trivy-fs-report.json
+                            fi
+                            if [ "${TRIVY_FS_HTML_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.html ]; then
+                                cat > ${SECURITY_REPORT_DIR}/trivy-fs-report.html <<EOF
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Trivy Filesystem Report</title></head>
+<body><h1>Trivy Filesystem Report</h1><p>No filesystem report generated in this build.</p></body></html>
+EOF
+                            fi
+
+                            echo "Trivy filesystem scan complete. Report sizes:"
+                            wc -c ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Scan Repository Secrets') {
             steps {
                 container('maven') {
@@ -526,6 +588,8 @@ EOF
                                     mkdir -p ${SECURITY_REPORT_DIR}
                                     test -f ${SECURITY_REPORT_DIR}/trivy-report.json || echo '{}' > ${SECURITY_REPORT_DIR}/trivy-report.json
                                     test -f ${SECURITY_REPORT_DIR}/trivy-report.html || echo '<html><body><h1>No Trivy report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/trivy-report.html
+                                    test -f ${SECURITY_REPORT_DIR}/trivy-fs-report.json || echo '{}' > ${SECURITY_REPORT_DIR}/trivy-fs-report.json
+                                    test -f ${SECURITY_REPORT_DIR}/trivy-fs-report.html || echo '<html><body><h1>No Trivy filesystem report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/trivy-fs-report.html
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-report.json || echo '[]' > ${SECURITY_REPORT_DIR}/gitleaks-report.json
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-report.html || echo '<html><body><h1>No Gitleaks report generated</h1></body></html>' > ${SECURITY_REPORT_DIR}/gitleaks-report.html
                                     test -f ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt || echo '2' > ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
@@ -542,6 +606,10 @@ EOF
 
                                     REPORT_STAGING_DIR="$(mktemp -d)"
                                     cp -R ${SECURITY_REPORT_DIR} "${REPORT_STAGING_DIR}/security-reports"
+                                    if [ -d cicd-reference-architectures/sample-application/target/site/jacoco ]; then
+                                        mkdir -p "${REPORT_STAGING_DIR}/jacoco"
+                                        cp -R cicd-reference-architectures/sample-application/target/site/jacoco/. "${REPORT_STAGING_DIR}/jacoco/"
+                                    fi
 
                                     git rev-parse --is-inside-work-tree
                                     git config user.name "Jenkins CI"
@@ -558,12 +626,19 @@ EOF
                                     git checkout -B main origin/main
                                     rm -rf ${SECURITY_REPORT_DIR}
                                     cp -R "${REPORT_STAGING_DIR}/security-reports" ${SECURITY_REPORT_DIR}
+                                    if [ -d "${REPORT_STAGING_DIR}/jacoco" ]; then
+                                        rm -rf docs/security-reports/jacoco
+                                        mkdir -p docs/security-reports/jacoco
+                                        cp -R "${REPORT_STAGING_DIR}/jacoco/." docs/security-reports/jacoco/
+                                    fi
                                     rm -rf "${REPORT_STAGING_DIR}"
 
                                     # Publish latest reports to the web dashboard folder.
                                     mkdir -p docs/security-reports
                                     cp ${SECURITY_REPORT_DIR}/trivy-report.html docs/security-reports/trivy-report.html
                                     cp ${SECURITY_REPORT_DIR}/trivy-report.json docs/security-reports/trivy-report.json
+                                    cp ${SECURITY_REPORT_DIR}/trivy-fs-report.html docs/security-reports/trivy-fs-report.html
+                                    cp ${SECURITY_REPORT_DIR}/trivy-fs-report.json docs/security-reports/trivy-fs-report.json
                                     cp ${SECURITY_REPORT_DIR}/gitleaks-report.html docs/security-reports/gitleaks-report.html
                                     cp ${SECURITY_REPORT_DIR}/gitleaks-report.json docs/security-reports/gitleaks-report.json
                                     cp ${SECURITY_REPORT_DIR}/sbom-report.html docs/security-reports/sbom-report.html
@@ -576,14 +651,19 @@ EOF
                                     printf '{"build":"%s","timestamp":"%s"}' "${BUILD_NUMBER}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > docs/security-reports/build-meta.json
 
                                     git add ${SECURITY_REPORT_DIR}/trivy-report.json ${SECURITY_REPORT_DIR}/trivy-report.html \
+                                            ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html \
                                             ${SECURITY_REPORT_DIR}/gitleaks-report.json ${SECURITY_REPORT_DIR}/gitleaks-report.html ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt \
                                             ${SECURITY_REPORT_DIR}/sbom-report.html ${SECURITY_REPORT_DIR}/sbom.cyclonedx.json ${SECURITY_REPORT_DIR}/sbom.spdx.json ${SECURITY_REPORT_DIR}/sbom.syft.txt \
                                             ${SECURITY_REPORT_DIR}/grype-report.html ${SECURITY_REPORT_DIR}/grype-report.json ${SECURITY_REPORT_DIR}/grype-report.txt ${SECURITY_REPORT_DIR}/grype-exit-code.txt ${SECURITY_REPORT_DIR}/grype-critical-count.txt ${SECURITY_REPORT_DIR}/grype-high-count.txt \
                                             docs/security-reports/trivy-report.html docs/security-reports/trivy-report.json \
+                                            docs/security-reports/trivy-fs-report.html docs/security-reports/trivy-fs-report.json \
                                             docs/security-reports/gitleaks-report.html docs/security-reports/gitleaks-report.json \
                                             docs/security-reports/sbom-report.html docs/security-reports/sbom.cyclonedx.json docs/security-reports/sbom.spdx.json docs/security-reports/sbom.syft.txt \
                                             docs/security-reports/grype-report.html docs/security-reports/grype-report.json docs/security-reports/grype-report.txt \
                                             docs/security-reports/build-meta.json
+                                    if [ -d docs/security-reports/jacoco ]; then
+                                        git add docs/security-reports/jacoco
+                                    fi
 
                                     if git diff --staged --quiet; then
                                         echo "No security report changes to commit"
@@ -777,12 +857,32 @@ EOF
             script {
                 echo "Pipeline execution completed"
                 // Archive build artifacts if needed
-                archiveArtifacts artifacts: 'cicd-reference-architectures/sample-application/target/**/*.jar,security-reports/trivy-report.json,security-reports/trivy-report.html,security-reports/gitleaks-report.json,security-reports/gitleaks-report.html,security-reports/gitleaks-exit-code.txt,security-reports/sbom-report.html,security-reports/sbom.cyclonedx.json,security-reports/sbom.spdx.json,security-reports/sbom.syft.txt,security-reports/grype-report.html,security-reports/grype-report.json,security-reports/grype-report.txt,security-reports/grype-exit-code.txt,security-reports/grype-critical-count.txt,security-reports/grype-high-count.txt', allowEmptyArchive: true
+                junit testResults: 'cicd-reference-architectures/sample-application/target/surefire-reports/*.xml', allowEmptyResults: true
+
+                archiveArtifacts artifacts: 'cicd-reference-architectures/sample-application/target/**/*.jar,cicd-reference-architectures/sample-application/target/site/jacoco/**/*,security-reports/trivy-report.json,security-reports/trivy-report.html,security-reports/trivy-fs-report.json,security-reports/trivy-fs-report.html,security-reports/gitleaks-report.json,security-reports/gitleaks-report.html,security-reports/gitleaks-exit-code.txt,security-reports/sbom-report.html,security-reports/sbom.cyclonedx.json,security-reports/sbom.spdx.json,security-reports/sbom.syft.txt,security-reports/grype-report.html,security-reports/grype-report.json,security-reports/grype-report.txt,security-reports/grype-exit-code.txt,security-reports/grype-critical-count.txt,security-reports/grype-high-count.txt', allowEmptyArchive: true
 
                 publishHTML(target: [
                     reportDir: 'security-reports',
                     reportFiles: 'trivy-report.html',
                     reportName: 'Trivy CVE Report',
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: true
+                ])
+
+                publishHTML(target: [
+                    reportDir: 'security-reports',
+                    reportFiles: 'trivy-fs-report.html',
+                    reportName: 'Trivy Filesystem Report',
+                    keepAll: true,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing: true
+                ])
+
+                publishHTML(target: [
+                    reportDir: 'cicd-reference-architectures/sample-application/target/site/jacoco',
+                    reportFiles: 'index.html',
+                    reportName: 'JaCoCo Code Coverage Report',
                     keepAll: true,
                     alwaysLinkToLastBuild: true,
                     allowMissing: true

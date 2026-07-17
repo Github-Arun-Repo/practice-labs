@@ -1,2 +1,3 @@
 cicd-reference-architectures/sample-application/target/
 .tools/
+.vscode/
