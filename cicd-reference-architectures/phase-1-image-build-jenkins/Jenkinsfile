@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        PIPELINE_VERSION = 'security-reports-owasp-v1-2026-07-16'
+        PIPELINE_VERSION = 'report-sync-shell-timeout-fix-v2-2026-07-17'
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
         IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
