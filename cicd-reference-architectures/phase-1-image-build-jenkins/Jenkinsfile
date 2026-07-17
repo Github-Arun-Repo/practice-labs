@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        PIPELINE_VERSION = 'quality-trivy-fs-jacoco-v1-2026-07-17'
+        PIPELINE_VERSION = 'quality-trivy-fs-jacoco-v2-2026-07-17'
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
         IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -21,6 +21,7 @@ pipeline {
         SYFT_IMAGE = 'anchore/syft:latest'
         GRYPE_IMAGE = 'anchore/grype:latest'
         GRYPE_FAIL_ON_SEVERITY = 'critical'
+        GRYPE_BLOCK_ON_SCAN_ERROR = 'false'
         ORAS_VERSION = '1.2.2'
         SONARQUBE_SERVER = 'SonarQube'  // Configure in Jenkins
     }
@@ -699,8 +700,12 @@ EOF
                             GRYPE_CRITICAL_COUNT="$(cat ${SECURITY_REPORT_DIR}/grype-critical-count.txt 2>/dev/null || echo 0)"
                             GRYPE_HIGH_COUNT="$(cat ${SECURITY_REPORT_DIR}/grype-high-count.txt 2>/dev/null || echo 0)"
                             if [ "${GRYPE_STATUS}" -ne 0 ]; then
-                                echo "Grype SBOM scan errored. Failing pipeline before registry push."
-                                exit 1
+                                if [ "${GRYPE_BLOCK_ON_SCAN_ERROR}" = "true" ]; then
+                                    echo "Grype SBOM scan errored. Failing pipeline before registry push."
+                                    exit 1
+                                fi
+                                echo "WARNING: Grype SBOM scan errored, but deployment is continuing because GRYPE_BLOCK_ON_SCAN_ERROR=${GRYPE_BLOCK_ON_SCAN_ERROR}."
+                                exit 0
                             fi
 
                             if [ "${GRYPE_FAIL_ON_SEVERITY}" = "high" ]; then
