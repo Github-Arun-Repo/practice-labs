@@ -166,10 +166,13 @@ EOF
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                             timeout(time: 20, unit: 'MINUTES') {
                                 sh '''
+                                    mkdir -p /var/jenkins-cache/owasp-dependency-check
                                     cd cicd-reference-architectures/sample-application
                                     mvn -B org.owasp:dependency-check-maven:10.0.4:check \
                                         -Dformats=HTML,JSON \
                                         -DoutputDirectory=../../${SECURITY_REPORT_DIR} \
+                                        -DdataDirectory=/var/jenkins-cache/owasp-dependency-check \
+                                        -Dautoupdate=true \
                                         -DfailBuildOnCVSS=11
                                 '''
                             }

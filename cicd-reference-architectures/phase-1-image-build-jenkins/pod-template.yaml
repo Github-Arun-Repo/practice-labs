@@ -14,6 +14,10 @@ spec:
       volumeMounts:
         - name: workspace-volume
           mountPath: /home/jenkins/agent
+        - name: maven-cache
+          mountPath: /root/.m2
+        - name: owasp-cache
+          mountPath: /var/jenkins-cache/owasp-dependency-check
     - name: docker
       image: docker:27-cli
       command:
@@ -33,3 +37,11 @@ spec:
         path: /var/run/docker.sock
     - name: workspace-volume
       emptyDir: {}
+    - name: maven-cache
+      hostPath:
+        path: /var/jenkins-cache/m2
+        type: DirectoryOrCreate
+    - name: owasp-cache
+      hostPath:
+        path: /var/jenkins-cache/owasp-dependency-check
+        type: DirectoryOrCreate
