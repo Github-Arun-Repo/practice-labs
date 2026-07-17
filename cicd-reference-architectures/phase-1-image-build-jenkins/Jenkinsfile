@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        PIPELINE_VERSION = 'security-reports-syft-sbom-v1-2026-07-17'
+        PIPELINE_VERSION = 'security-reports-syft-sbom-v2-2026-07-17'
         REGISTRY = 'docker.io'  // Change to your registry: gcr.io, ecr, etc.
         IMAGE_NAME = 'agovindasamy/arun'
         IMAGE_TAG = "${BUILD_NUMBER}"
@@ -491,10 +491,16 @@ EOF
             steps {
                 container('docker') {
                     script {
-                        echo "Attaching CycloneDX SBOM to image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        echo "Attempting to attach CycloneDX SBOM to image: ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
                         withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS_ID}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                             sh '''
-                                test -s ${SECURITY_REPORT_DIR}/sbom.cyclonedx.json
+                                set +e
+
+                                if [ ! -s ${SECURITY_REPORT_DIR}/sbom.cyclonedx.json ]; then
+                                    echo "WARNING: ${SECURITY_REPORT_DIR}/sbom.cyclonedx.json is missing. Skipping image SBOM attachment."
+                                    exit 0
+                                fi
+
                                 mkdir -p .tools
 
                                 ORAS_ARCHIVE="oras_${ORAS_VERSION}_linux_amd64.tar.gz"
@@ -503,35 +509,76 @@ EOF
                                 if [ ! -x .tools/oras ]; then
                                     echo "Downloading ORAS ${ORAS_VERSION} from ${ORAS_URL}"
                                     rm -f ".tools/${ORAS_ARCHIVE}"
+
+                                    DOWNLOAD_STATUS=1
                                     if command -v curl >/dev/null 2>&1; then
                                         curl --fail --location --retry 3 --retry-all-errors \
                                             --connect-timeout 15 --max-time 180 --progress-bar \
                                             "${ORAS_URL}" \
                                             --output ".tools/${ORAS_ARCHIVE}"
-                                    elif command -v wget >/dev/null 2>&1; then
-                                        wget -O ".tools/${ORAS_ARCHIVE}" "${ORAS_URL}"
-                                    elif command -v apk >/dev/null 2>&1; then
-                                        apk add --no-cache curl tar gzip
-                                        curl --fail --location --retry 3 --retry-all-errors \
-                                            --connect-timeout 15 --max-time 180 --progress-bar \
-                                            "${ORAS_URL}" \
-                                            --output ".tools/${ORAS_ARCHIVE}"
-                                    else
-                                        echo "ERROR: curl, wget, or apk is required to download ORAS."
-                                        exit 1
+                                        DOWNLOAD_STATUS=$?
                                     fi
-                                    test -s ".tools/${ORAS_ARCHIVE}"
+
+                                    if [ "${DOWNLOAD_STATUS}" -ne 0 ] && command -v wget >/dev/null 2>&1; then
+                                        wget -T 30 -O ".tools/${ORAS_ARCHIVE}" "${ORAS_URL}"
+                                        DOWNLOAD_STATUS=$?
+                                    fi
+
+                                    if [ "${DOWNLOAD_STATUS}" -ne 0 ] && command -v apk >/dev/null 2>&1; then
+                                        apk add --no-cache curl tar gzip
+                                        APK_STATUS=$?
+                                        if [ "${APK_STATUS}" -eq 0 ]; then
+                                            curl --fail --location --retry 3 --retry-all-errors \
+                                                --connect-timeout 15 --max-time 180 --progress-bar \
+                                                "${ORAS_URL}" \
+                                                --output ".tools/${ORAS_ARCHIVE}"
+                                            DOWNLOAD_STATUS=$?
+                                        fi
+                                    fi
+
+                                    if [ "${DOWNLOAD_STATUS}" -ne 0 ] || [ ! -s ".tools/${ORAS_ARCHIVE}" ]; then
+                                        echo "WARNING: Could not download ORAS. SBOM remains available as Jenkins artifacts and website files; image attachment skipped."
+                                        exit 0
+                                    fi
+
                                     tar -xzf ".tools/${ORAS_ARCHIVE}" -C .tools oras
+                                    TAR_STATUS=$?
+                                    if [ "${TAR_STATUS}" -ne 0 ]; then
+                                        echo "WARNING: Could not extract ORAS archive. SBOM image attachment skipped."
+                                        exit 0
+                                    fi
+
                                     chmod +x .tools/oras
                                 fi
 
                                 ./.tools/oras version
+                                ORAS_VERSION_STATUS=$?
+                                if [ "${ORAS_VERSION_STATUS}" -ne 0 ]; then
+                                    echo "WARNING: ORAS is not executable. SBOM image attachment skipped."
+                                    exit 0
+                                fi
+
                                 echo "${DOCKER_PASS}" | ./.tools/oras login ${REGISTRY} -u "${DOCKER_USER}" --password-stdin
+                                ORAS_LOGIN_STATUS=$?
+                                if [ "${ORAS_LOGIN_STATUS}" -ne 0 ]; then
+                                    echo "WARNING: ORAS login failed. SBOM image attachment skipped."
+                                    exit 0
+                                fi
+
                                 ./.tools/oras attach ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
                                     --artifact-type application/vnd.cyclonedx+json \
                                     --annotation org.opencontainers.image.title="CycloneDX SBOM for ${IMAGE_NAME}:${IMAGE_TAG}" \
                                     ${SECURITY_REPORT_DIR}/sbom.cyclonedx.json:application/vnd.cyclonedx+json
+                                ORAS_ATTACH_STATUS=$?
+
                                 ./.tools/oras logout ${REGISTRY} || true
+
+                                if [ "${ORAS_ATTACH_STATUS}" -ne 0 ]; then
+                                    echo "WARNING: ORAS attach failed. SBOM remains available as Jenkins artifacts and website files."
+                                    exit 0
+                                fi
+
+                                echo "CycloneDX SBOM attached to ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}."
                             '''
                         }
                     }
