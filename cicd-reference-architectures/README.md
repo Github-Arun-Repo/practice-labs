@@ -33,13 +33,16 @@ The focus is not simply "run CI/CD." The focus is the **security supply chain** 
 15. [9. Scan Container Image](#9-scan-container-image)
 16. [10. Scan Filesystem](#10-scan-filesystem)
 17. [11. Scan Secrets](#11-scan-secrets)
-18. [12. Apply Security Gates](#12-apply-security-gates)
-19. [13. Push to Registry](#13-push-to-registry)
-20. [14. Attach SBOM](#14-attach-sbom)
-21. [15. Publish Evidence](#15-publish-evidence)
-22. [Reference Implementations](#reference-implementations)
-23. [Runbooks vs Reference Guides](#runbooks-vs-reference-guides)
-24. [Roadmap](#roadmap)
+17. [12. Publish Report Evidence](#12-publish-report-evidence)
+18. [13. Apply Security Gates](#13-apply-security-gates)
+19. [14. Push to Registry](#14-push-to-registry)
+20. [15. Sign Image](#15-sign-image)
+21. [16. Attest Image](#16-attest-image)
+22. [17. Attach SBOM](#17-attach-sbom)
+23. [18. Publish Cosign Evidence](#18-publish-cosign-evidence)
+24. [Reference Implementations](#reference-implementations)
+25. [Runbooks vs Reference Guides](#runbooks-vs-reference-guides)
+26. [Roadmap](#roadmap)
 
 ## Architecture Intent
 
@@ -64,22 +67,33 @@ flowchart LR
     checkout[02<br/>Checkout]
     tests[03<br/>Unit Tests]
     coverage[04<br/>Coverage]
-    package[05<br/>Package App]
-    image[06<br/>Build Image]
-    sbom[07<br/>Generate SBOM]
-    grype[08<br/>SBOM Risk Scan]
-    trivyImage[09<br/>Image Scan]
-    trivyFs[10<br/>Filesystem Scan]
-    gitleaks[11<br/>Secret Scan]
-    gates[12<br/>Security Gates]
-    registry[13<br/>Registry Push]
-    attach[14<br/>Attach SBOM]
-    evidence[15<br/>Evidence Dashboard]
+    sonar[05<br/>SonarQube Optional]
+    package[06<br/>Package App]
+    image[07<br/>Build Image]
+    sbom[08<br/>Generate SBOM]
+    grype[09<br/>SBOM Risk Scan]
+    trivyImage[10<br/>Image Scan]
+    trivyFs[11<br/>Filesystem Scan]
+    gitleaks[12<br/>Secret Scan]
+    reportCommit[13<br/>Publish Report Evidence]
+    gates[14<br/>Security Gates]
+    registry[15<br/>Registry Push]
+    sign[16<br/>Cosign Sign Optional]
+    attest[17<br/>Cosign Attest Optional]
+    attach[18<br/>Attach SBOM]
+    cosignCommit[19<br/>Publish Cosign Evidence]
+    evidence[20<br/>Evidence Dashboard]
 
-    commit --> checkout --> tests --> coverage --> package --> image --> sbom --> grype --> gates --> registry --> attach --> evidence
+    commit --> checkout --> tests --> coverage --> sonar --> package --> image --> sbom --> grype --> reportCommit --> gates --> registry --> sign --> attest --> attach --> cosignCommit --> evidence
     image --> trivyImage --> gates
     package --> trivyFs --> gates
     checkout --> gitleaks --> gates
+    grype --> reportCommit
+    trivyImage --> reportCommit
+    trivyFs --> reportCommit
+    gitleaks --> reportCommit
+    reportCommit --> evidence
+    cosignCommit --> evidence
 
     classDef source fill:#e7f0ff,stroke:#1f6feb,color:#0b1f44,stroke-width:1px;
     classDef quality fill:#ecfdf3,stroke:#1a7f37,color:#062b16,stroke-width:1px;
@@ -90,8 +104,8 @@ flowchart LR
     class commit,checkout source;
     class tests,coverage quality;
     class package,image,sbom artifact;
-    class grype,trivyImage,trivyFs,gitleaks,gates security;
-    class registry,attach,evidence publish;
+    class grype,trivyImage,trivyFs,gitleaks,gates,sign,attest security;
+    class registry,reportCommit,attach,cosignCommit,evidence publish;
 ```
 
 This is the core chain: code enters, controls run one after another, evidence is produced, and only approved artifacts move forward.
@@ -185,7 +199,7 @@ Click any stage to inspect what it does, why it exists, and where it is useful.
 | 1 | [Source and Checkout](#1-source-and-checkout) | Git + Jenkins SCM | traceable source input | yes, if checkout fails |
 | 2 | [Unit Tests](#2-unit-tests) | Maven Surefire + JUnit | behavior validation | yes |
 | 3 | [Code Coverage](#3-code-coverage) | JaCoCo | coverage evidence | reported |
-| 4 | [SAST and Code Quality](#4-sast-and-code-quality) | SonarQube | source-level security and maintainability | planned gate |
+| 4 | [SAST and Code Quality](#4-sast-and-code-quality) | SonarQube | source-level security and maintainability | optional / planned |
 | 5 | [Package Application](#5-package-application) | Maven | build JAR artifact | yes |
 | 6 | [Build Container Image](#6-build-container-image) | Docker | immutable runtime artifact | yes |
 | 7 | [Generate SBOM](#7-generate-sbom) | Syft | package inventory | reported |
@@ -193,10 +207,13 @@ Click any stage to inspect what it does, why it exists, and where it is useful.
 | 9 | [Scan Container Image](#9-scan-container-image) | Trivy image | image layer CVEs | reported |
 | 10 | [Scan Filesystem](#10-scan-filesystem) | Trivy fs | source/build context scan | reported |
 | 11 | [Scan Secrets](#11-scan-secrets) | Gitleaks | committed secret detection | yes |
-| 12 | [Apply Security Gates](#12-apply-security-gates) | Jenkins policy logic | promotion decision | yes |
-| 13 | [Push to Registry](#13-push-to-registry) | Docker | artifact promotion | yes |
-| 14 | [Attach SBOM](#14-attach-sbom) | ORAS | OCI artifact attachment | best effort |
-| 15 | [Publish Evidence](#15-publish-evidence) | Jenkins + Git + HTML | audit and review | reported |
+| 12 | [Publish Report Evidence](#12-publish-report-evidence) | Jenkins + Git + HTML | public report publication before promotion | reported |
+| 13 | [Apply Security Gates](#13-apply-security-gates) | Jenkins policy logic | promotion decision | yes |
+| 14 | [Push to Registry](#14-push-to-registry) | Docker | artifact promotion | yes |
+| 15 | [Sign Image](#15-sign-image) | Cosign | digest integrity proof | optional |
+| 16 | [Attest Image](#16-attest-image) | Cosign | SBOM and build evidence referrers | optional |
+| 17 | [Attach SBOM](#17-attach-sbom) | ORAS | OCI artifact attachment | best effort |
+| 18 | [Publish Cosign Evidence](#18-publish-cosign-evidence) | Jenkins + Git + HTML | public signing and attestation evidence | optional |
 
 ## 1. Source and Checkout
 
@@ -434,7 +451,24 @@ Secrets in source control are high-risk findings. If a secret is committed, the 
 
 - [Gitleaks Secret Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/gitleaks-report.html)
 
-## 12. Apply Security Gates
+## 12. Publish Report Evidence
+
+**What happens**
+
+Before the promotion gate is evaluated, Jenkins commits the latest report artifacts back into the repository and updates the public dashboard content.
+
+**Why this matters**
+
+This makes the security evidence visible even when a later gate blocks the release. Reviewers can inspect the exact build outputs without requiring Jenkins access.
+
+**Where this is useful**
+
+- release review preparation
+- audit-friendly evidence publication
+- engineering demos and walkthroughs
+- failure analysis when promotion is blocked
+
+## 13. Apply Security Gates
 
 **What happens**
 
@@ -457,7 +491,7 @@ Security reports are useful, but gates decide whether an artifact is allowed to 
 - release readiness decisions
 - balancing security rigor with pipeline reliability
 
-## 13. Push to Registry
+## 14. Push to Registry
 
 **What happens**
 
@@ -480,7 +514,47 @@ After the image is pushed, the strongest next steps are to sign the immutable di
 
 - [Cosign Signing](./tools/cosign-signing.md)
 
-## 14. Attach SBOM
+## 15. Sign Image
+
+**What happens**
+
+When Cosign is enabled, Jenkins signs the immutable pushed image digest after registry publication.
+
+**Why this matters**
+
+Signing proves integrity and gives downstream consumers a way to verify that the digest they are pulling is the one the pipeline intended to publish.
+
+**Where this is useful**
+
+- interview-friendly supply chain demos
+- cluster admission verification
+- release provenance and trust establishment
+
+**Tool reference**
+
+- [Cosign Signing](./tools/cosign-signing.md)
+
+## 16. Attest Image
+
+**What happens**
+
+When Cosign is enabled, Jenkins creates attestations for the CycloneDX SBOM and build metadata predicate.
+
+**Why this matters**
+
+Attestations carry evidence about the artifact, not just a proof that the artifact was signed. This is where package inventory and build context become verifiable OCI referrers.
+
+**Where this is useful**
+
+- SBOM-linked release evidence
+- policy engines consuming predicates
+- downstream supply chain verification
+
+**Tool reference**
+
+- [Cosign Signing](./tools/cosign-signing.md)
+
+## 17. Attach SBOM
 
 **What happens**
 
@@ -494,15 +568,15 @@ Attaching evidence to the artifact keeps inventory close to the image it describ
 
 This step is best effort. If ORAS or the registry attachment fails, the SBOM remains available as Jenkins artifacts and public dashboard evidence.
 
-## 15. Publish Evidence
+## 18. Publish Cosign Evidence
 
 **What happens**
 
-The pipeline publishes reports into `docs/security-reports/` and exposes them through a static dashboard.
+When Cosign is enabled, Jenkins publishes signing, verification, attestation, and referrer evidence into `docs/security-reports/` and exposes it through the same public dashboard.
 
 **Why this matters**
 
-Engineers should not need Jenkins permissions to inspect the evidence. Git-backed reports make the result reviewable, shareable, and versioned.
+Signing only helps if others can inspect and verify it. Publishing the evidence makes the signature flow visible and reviewable for other engineers.
 
 **Where this is useful**
 

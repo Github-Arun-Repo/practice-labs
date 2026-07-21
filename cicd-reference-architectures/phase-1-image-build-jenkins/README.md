@@ -99,70 +99,50 @@ Stages provide visual progress, isolated failure reporting ("failed at Stage 4")
 ## Pipeline Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                        Jenkins Pipeline                              │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  Git Push / Webhook                                                   │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌─────────────┐                                                      │
-│  │  Checkout   │  Clone repo, check out main branch                   │
-│  └──────┬──────┘                                                      │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Build & Test    │  mvn clean test ── fail if tests fail           │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Code Quality    │  SonarQube static analysis                      │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Build JAR       │  mvn package → executable JAR                   │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Build Image     │  docker build (multi-stage) → tagged image      │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Scan Image      │  Trivy CVE scan → fail on CRITICAL/HIGH         │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌──────────────────┐                                                 │
-│  │  Push to Registry│  docker push → versioned + latest               │
-│  └──────┬───────────┘                                                 │
-│         │                                                             │
-│         ▼                                                             │
-│  ┌────────────────────────┐                                           │
-│  │  Update Manifests      │  Tag → ArgoCD repo (Phase 2)              │
-│  └────────────────────────┘                                           │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
+Checkout
+    -> Unit Tests & Code Coverage
+    -> SonarQube Analysis Placeholder (currently disabled)
+    -> Build Application
+    -> Build Docker Image
+    -> Generate Image SBOM
+    -> Scan SBOM with Grype
+    -> Scan Docker Image with Trivy
+    -> Scan Filesystem with Trivy
+    -> Scan Repository Secrets with Gitleaks
+    -> Commit Security Reports
+    -> Enforce Security Gates
+    -> Push to Registry
+    -> Sign Image with Cosign (optional)
+    -> Attest Image with Cosign (optional)
+    -> Attach SBOM to Image
+    -> Commit Cosign Evidence (optional)
+    -> Update Deployment Manifests
 ```
 
 ### Why This Stage Order?
 
 The order is deliberate. Each stage filters defects before they reach the next, more expensive stage:
 
-| Stage | Typical duration | What it catches |
-|-------|-----------------|-----------------|
-| Checkout | ~5 seconds | Wrong branch, missing repo access |
-| Build & Test | 30–60 seconds | Compile errors, failing unit tests |
-| Code Quality | 30–90 seconds | Code smells, security hotspots, low coverage |
-| Build JAR | 10–20 seconds | Packaging errors |
-| Build Image | 20–60 seconds | Dockerfile errors, missing runtime dependencies |
-| Scan Image | 30–60 seconds | Known CVEs in OS and application packages |
-| Push | 10–30 seconds | Registry auth failures, network issues |
+| Stage | Purpose in the current pipeline |
+|-------|-------------------------------|
+| Checkout | Pull the exact source revision |
+| Unit Tests & Code Coverage | Validate behavior and generate JaCoCo evidence |
+| SonarQube Placeholder | Reserved for source-level SAST and quality gates |
+| Build Application | Create the packaged Spring Boot JAR |
+| Build Docker Image | Build the deployable runtime image |
+| Generate Image SBOM | Create CycloneDX, SPDX, and table SBOM outputs |
+| Scan SBOM with Grype | Evaluate package inventory for vulnerability risk |
+| Scan Docker Image | Evaluate runtime image layers for vulnerabilities |
+| Scan Filesystem | Evaluate source and build context for risks and misconfigurations |
+| Scan Repository Secrets | Detect committed credentials and tokens |
+| Commit Security Reports | Publish report evidence to Git and the dashboard |
+| Enforce Security Gates | Block promotion when gating policies fail |
+| Push to Registry | Publish the image only after gates pass |
+| Sign / Attest with Cosign | Add digest signatures and verifiable predicates when enabled |
+| Attach SBOM | Attach CycloneDX SBOM as an OCI artifact |
+| Commit Cosign Evidence | Publish signing evidence to Git and the dashboard |
 
-**Design principle:** If stage 2 (tests) fails, we never burn time on stages 6–8 (image build, scan, push). This is the fail-fast principle.
+**Design principle:** cheaper source-level failures stop the build before expensive artifact publication, while report evidence is still published before promotion so engineers can inspect what happened.
 
 ---
 
