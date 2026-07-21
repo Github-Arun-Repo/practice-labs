@@ -23,23 +23,23 @@ The focus is not simply "run CI/CD." The focus is the **security supply chain** 
 5. [Tool Reference Library](#tool-reference-library)
 6. [Stage Navigator](#stage-navigator)
 7. [1. Source and Checkout](#1-source-and-checkout)
-8. [2. Unit Tests](#2-unit-tests)
-9. [3. Code Coverage](#3-code-coverage)
-10. [4. SAST and Code Quality](#4-sast-and-code-quality)
-11. [5. Package Application](#5-package-application)
-12. [6. Build Container Image](#6-build-container-image)
-13. [7. Generate SBOM](#7-generate-sbom)
-14. [8. Scan SBOM](#8-scan-sbom)
-15. [9. Scan Container Image](#9-scan-container-image)
-16. [10. Scan Filesystem](#10-scan-filesystem)
-17. [11. Scan Secrets](#11-scan-secrets)
-17. [12. Publish Report Evidence](#12-publish-report-evidence)
-18. [13. Apply Security Gates](#13-apply-security-gates)
-19. [14. Push to Registry](#14-push-to-registry)
-20. [15. Sign Image](#15-sign-image)
-21. [16. Attest Image](#16-attest-image)
-22. [17. Attach SBOM](#17-attach-sbom)
-23. [18. Publish Cosign Evidence](#18-publish-cosign-evidence)
+8. [2. Scan Secrets](#2-scan-secrets)
+9. [3. Scan Filesystem](#3-scan-filesystem)
+10. [4. Unit Tests](#4-unit-tests)
+11. [5. Code Coverage](#5-code-coverage)
+12. [6. SAST and Code Quality](#6-sast-and-code-quality)
+13. [7. Package Application](#7-package-application)
+14. [8. Build Container Image](#8-build-container-image)
+15. [9. Generate SBOM](#9-generate-sbom)
+16. [10. Scan SBOM](#10-scan-sbom)
+17. [11. Scan Container Image](#11-scan-container-image)
+18. [12. Publish Report Evidence](#12-publish-report-evidence)
+19. [13. Apply Security Gates](#13-apply-security-gates)
+20. [14. Push to Registry](#14-push-to-registry)
+21. [15. Sign Image](#15-sign-image)
+22. [16. Attest Image](#16-attest-image)
+23. [17. Attach SBOM](#17-attach-sbom)
+24. [18. Publish Cosign Evidence](#18-publish-cosign-evidence)
 24. [Reference Implementations](#reference-implementations)
 25. [Runbooks vs Reference Guides](#runbooks-vs-reference-guides)
 26. [Roadmap](#roadmap)
@@ -65,16 +65,16 @@ The architecture is designed as a chain of evidence. Each step either validates 
 flowchart LR
     commit[01<br/>Developer Commit]
     checkout[02<br/>Checkout]
-    tests[03<br/>Unit Tests]
-    coverage[04<br/>Coverage]
-    sonar[05<br/>SonarQube Optional]
-    package[06<br/>Package App]
-    image[07<br/>Build Image]
-    sbom[08<br/>Generate SBOM]
-    grype[09<br/>SBOM Risk Scan]
-    trivyImage[10<br/>Image Scan]
-    trivyFs[11<br/>Filesystem Scan]
-    gitleaks[12<br/>Secret Scan]
+    gitleaks[03<br/>Secret Scan]
+    trivyFs[04<br/>Filesystem Scan]
+    tests[05<br/>Unit Tests]
+    coverage[06<br/>Coverage]
+    sonar[07<br/>SonarQube Optional]
+    package[08<br/>Package App]
+    image[09<br/>Build Image]
+    sbom[10<br/>Generate SBOM]
+    grype[11<br/>SBOM Risk Scan]
+    trivyImage[12<br/>Image Scan]
     reportCommit[13<br/>Publish Report Evidence]
     gates[14<br/>Security Gates]
     registry[15<br/>Registry Push]
@@ -84,14 +84,15 @@ flowchart LR
     cosignCommit[19<br/>Publish Cosign Evidence]
     evidence[20<br/>Evidence Dashboard]
 
-    commit --> checkout --> tests --> coverage --> sonar --> package --> image --> sbom --> grype --> reportCommit --> gates --> registry --> sign --> attest --> attach --> cosignCommit --> evidence
-    image --> trivyImage --> gates
-    package --> trivyFs --> gates
-    checkout --> gitleaks --> gates
+    commit --> checkout --> gitleaks --> trivyFs --> tests --> coverage --> sonar --> package --> image --> sbom --> grype --> trivyImage --> reportCommit --> gates --> registry --> sign --> attest --> attach --> cosignCommit --> evidence
+    gitleaks --> gates
+    trivyFs --> gates
+    grype --> gates
+    trivyImage --> gates
+    gitleaks --> reportCommit
+    trivyFs --> reportCommit
     grype --> reportCommit
     trivyImage --> reportCommit
-    trivyFs --> reportCommit
-    gitleaks --> reportCommit
     reportCommit --> evidence
     cosignCommit --> evidence
 
@@ -197,16 +198,16 @@ Click any stage to inspect what it does, why it exists, and where it is useful.
 | Order | Stage | Tool | Used For | Gate |
 |---:|---|---|---|---|
 | 1 | [Source and Checkout](#1-source-and-checkout) | Git + Jenkins SCM | traceable source input | yes, if checkout fails |
-| 2 | [Unit Tests](#2-unit-tests) | Maven Surefire + JUnit | behavior validation | yes |
-| 3 | [Code Coverage](#3-code-coverage) | JaCoCo | coverage evidence | reported |
-| 4 | [SAST and Code Quality](#4-sast-and-code-quality) | SonarQube | source-level security and maintainability | optional / planned |
-| 5 | [Package Application](#5-package-application) | Maven | build JAR artifact | yes |
-| 6 | [Build Container Image](#6-build-container-image) | Docker | immutable runtime artifact | yes |
-| 7 | [Generate SBOM](#7-generate-sbom) | Syft | package inventory | reported |
-| 8 | [Scan SBOM](#8-scan-sbom) | Grype | dependency/package CVEs | severity gated |
-| 9 | [Scan Container Image](#9-scan-container-image) | Trivy image | image layer CVEs | reported |
-| 10 | [Scan Filesystem](#10-scan-filesystem) | Trivy fs | source/build context scan | reported |
-| 11 | [Scan Secrets](#11-scan-secrets) | Gitleaks | committed secret detection | yes |
+| 2 | [Scan Secrets](#2-scan-secrets) | Gitleaks | committed secret detection | yes |
+| 3 | [Scan Filesystem](#3-scan-filesystem) | Trivy fs | source/build context scan | reported |
+| 4 | [Unit Tests](#4-unit-tests) | Maven Surefire + JUnit | behavior validation | yes |
+| 5 | [Code Coverage](#5-code-coverage) | JaCoCo | coverage evidence | reported |
+| 6 | [SAST and Code Quality](#6-sast-and-code-quality) | SonarQube | source-level security and maintainability | optional / planned |
+| 7 | [Package Application](#7-package-application) | Maven | build JAR artifact | yes |
+| 8 | [Build Container Image](#8-build-container-image) | Docker | immutable runtime artifact | yes |
+| 9 | [Generate SBOM](#9-generate-sbom) | Syft | package inventory | reported |
+| 10 | [Scan SBOM](#10-scan-sbom) | Grype | dependency/package CVEs | severity gated |
+| 11 | [Scan Container Image](#11-scan-container-image) | Trivy image | image layer CVEs | reported |
 | 12 | [Publish Report Evidence](#12-publish-report-evidence) | Jenkins + Git + HTML | public report publication before promotion | reported |
 | 13 | [Apply Security Gates](#13-apply-security-gates) | Jenkins policy logic | promotion decision | yes |
 | 14 | [Push to Registry](#14-push-to-registry) | Docker | artifact promotion | yes |
@@ -236,7 +237,49 @@ Every downstream artifact must be traceable to source code. Without a clean sour
 
 - [Jenkinsfile](./phase-1-image-build-jenkins/Jenkinsfile)
 
-## 2. Unit Tests
+## 2. Scan Secrets
+
+**What happens**
+
+Gitleaks scans the repository immediately after checkout for hardcoded credentials, keys, and tokens.
+
+**Why this matters**
+
+Secrets in source control are high-risk findings and should fail the build before the pipeline spends time compiling, packaging, or creating images.
+
+**Where this is useful**
+
+- repository protection
+- early fail-fast validation
+- credential hygiene
+- audit evidence for secret scanning
+
+**Evidence produced**
+
+- [Gitleaks Secret Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/gitleaks-report.html)
+
+## 3. Scan Filesystem
+
+**What happens**
+
+Trivy FS scans the application filesystem and build context before packaging or image creation.
+
+**Why this matters**
+
+This check is source-oriented, so it belongs early. Running it before image creation gives faster feedback on dependencies, misconfigurations, and embedded secrets without waiting for the container build.
+
+**Where this is useful**
+
+- quick dependency checks
+- source and build-context inspection
+- misconfiguration review
+- early feedback before artifact creation
+
+**Evidence produced**
+
+- [Trivy Filesystem Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/trivy-fs-report.html)
+
+## 4. Unit Tests
 
 **What happens**
 
@@ -258,7 +301,7 @@ Unit tests catch broken behavior before the pipeline spends time creating images
 - Surefire XML test reports
 - Jenkins JUnit test result view
 
-## 3. Code Coverage
+## 5. Code Coverage
 
 **What happens**
 
@@ -279,7 +322,7 @@ Coverage does not prove quality by itself, but it shows which code paths are exe
 
 - [JaCoCo Coverage Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/jacoco/index.html)
 
-## 4. SAST and Code Quality
+## 6. SAST and Code Quality
 
 **What happens**
 
@@ -301,7 +344,7 @@ SAST belongs before package and image promotion because source-level vulnerabili
 
 - [SonarQube SAST](./tools/sonarqube-sast.md)
 
-## 5. Package Application
+## 7. Package Application
 
 **What happens**
 
@@ -317,7 +360,7 @@ The JAR is the application artifact copied into the container image. A packaging
 - release artifact creation
 - reproducible application packaging
 
-## 6. Build Container Image
+## 8. Build Container Image
 
 **What happens**
 
@@ -334,7 +377,7 @@ The image is the deployable unit. It must be immutable, traceable, and tested be
 - container registry promotion
 - environment parity across dev, staging, and production
 
-## 7. Generate SBOM
+## 9. Generate SBOM
 
 **What happens**
 
@@ -361,7 +404,7 @@ An SBOM answers: "What is inside this artifact?" It creates the package inventor
 
 - [SBOM Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/sbom-report.html)
 
-## 8. Scan SBOM
+## 10. Scan SBOM
 
 **What happens**
 
@@ -388,7 +431,7 @@ SBOM scanning separates package inventory from vulnerability matching. This is u
 
 - [Grype SBOM Vulnerability Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/grype-report.html)
 
-## 9. Scan Container Image
+## 11. Scan Container Image
 
 **What happens**
 
@@ -408,48 +451,6 @@ Image scanning checks the actual deployable artifact, not only the source tree. 
 **Evidence produced**
 
 - [Trivy Image Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/trivy-report.html)
-
-## 10. Scan Filesystem
-
-**What happens**
-
-Trivy FS scans the application filesystem and build context.
-
-**Why this matters**
-
-This is the current lightweight replacement for OWASP Dependency-Check. It avoids the long NVD update behavior while still providing useful filesystem, dependency, secret, and misconfiguration visibility.
-
-**Where this is useful**
-
-- quick dependency checks
-- source and build-context inspection
-- misconfiguration review
-- early feedback before registry promotion
-
-**Evidence produced**
-
-- [Trivy Filesystem Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/trivy-fs-report.html)
-
-## 11. Scan Secrets
-
-**What happens**
-
-Gitleaks scans the repository for hardcoded credentials, keys, and tokens.
-
-**Why this matters**
-
-Secrets in source control are high-risk findings. If a secret is committed, the correct response is to fail the pipeline, rotate the credential, and remove the exposure.
-
-**Where this is useful**
-
-- repository protection
-- pre-release validation
-- credential hygiene
-- audit evidence for secret scanning
-
-**Evidence produced**
-
-- [Gitleaks Secret Report](https://htmlpreview.github.io/?https://github.com/Github-Arun-Repo/platform-engineering-reference-architectures/blob/main/docs/security-reports/gitleaks-report.html)
 
 ## 12. Publish Report Evidence
 

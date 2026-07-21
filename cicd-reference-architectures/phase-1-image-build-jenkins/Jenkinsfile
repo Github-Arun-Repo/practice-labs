@@ -57,6 +57,181 @@ pipeline {
             }
         }
 
+        stage('Scan Repository Secrets') {
+            steps {
+                container('maven') {
+                    script {
+                        echo "Scanning repository for secret leaks with Gitleaks..."
+                        sh '''
+                            mkdir -p ${SECURITY_REPORT_DIR} .tools
+                            rm -f ${SECURITY_REPORT_DIR}/gitleaks-report.json \
+                                  ${SECURITY_REPORT_DIR}/gitleaks-report.html \
+                                  ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
+
+                            GITLEAKS_ARCHIVE="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+                            GITLEAKS_URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${GITLEAKS_ARCHIVE}"
+
+                            if [ ! -x .tools/gitleaks ]; then
+                                echo "Downloading Gitleaks ${GITLEAKS_VERSION} from ${GITLEAKS_URL}"
+                                rm -f ".tools/${GITLEAKS_ARCHIVE}"
+                                curl --fail --location --retry 3 --retry-all-errors \
+                                    --connect-timeout 15 --max-time 180 --progress-bar \
+                                    "${GITLEAKS_URL}" \
+                                    --output ".tools/${GITLEAKS_ARCHIVE}"
+                                test -s ".tools/${GITLEAKS_ARCHIVE}"
+                                ls -lh ".tools/${GITLEAKS_ARCHIVE}"
+                                tar -xzf ".tools/${GITLEAKS_ARCHIVE}" -C .tools gitleaks
+                                chmod +x .tools/gitleaks
+                                ./.tools/gitleaks version
+                            fi
+
+                            set +e
+                            ./.tools/gitleaks dir . \
+                                --config cicd-reference-architectures/phase-1-image-build-jenkins/gitleaks.toml \
+                                --gitleaks-ignore-path cicd-reference-architectures/phase-1-image-build-jenkins/.gitleaksignore \
+                                --report-format json \
+                                --report-path ${SECURITY_REPORT_DIR}/gitleaks-report.json \
+                                --redact \
+                                --exit-code 1
+                            GITLEAKS_STATUS=$?
+                            set -e
+
+                            if [ ! -s ${SECURITY_REPORT_DIR}/gitleaks-report.json ]; then
+                                echo '[]' > ${SECURITY_REPORT_DIR}/gitleaks-report.json
+                            fi
+
+                            FINDINGS_COUNT=$(grep -o '"RuleID"' ${SECURITY_REPORT_DIR}/gitleaks-report.json | wc -l | tr -d ' ')
+                            if [ -z "${FINDINGS_COUNT}" ]; then
+                                FINDINGS_COUNT=0
+                            fi
+
+                            GITLEAKS_STATUS_CLASS=""
+                            if [ "${GITLEAKS_STATUS}" -eq 0 ]; then
+                                GITLEAKS_STATUS_TEXT="No secrets detected"
+                                GITLEAKS_STATUS_CLASS="clean"
+                            elif [ "${GITLEAKS_STATUS}" -eq 1 ]; then
+                                GITLEAKS_STATUS_TEXT="Secrets detected"
+                            else
+                                GITLEAKS_STATUS_TEXT="Gitleaks scan error"
+                                GITLEAKS_STATUS_CLASS="error"
+                            fi
+
+                            cat > ${SECURITY_REPORT_DIR}/gitleaks-report.html <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gitleaks Secret Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; color: #24292f; margin: 0; padding: 32px; }
+        .panel { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 24px; }
+        .meta { margin-bottom: 16px; color: #57606a; }
+        .status { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 12px; background: #fff8c5; color: #9a6700; }
+        .status.clean { background: #dafbe1; color: #116329; }
+        .status.error { background: #ffebe9; color: #cf222e; }
+        .actions a { display: inline-block; padding: 8px 14px; border-radius: 6px; background: #1f6feb; color: #fff; text-decoration: none; font-size: 0.9rem; }
+        .actions a:hover { background: #1a5fb7; }
+        ul { color: #57606a; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h1>Gitleaks Secret Report</h1>
+        <p class="meta">Repository: platform-engineering-reference-architectures</p>
+        <p class="status ${GITLEAKS_STATUS_CLASS}">${GITLEAKS_STATUS_TEXT}</p>
+        <p class="meta">Findings: ${FINDINGS_COUNT} &middot; Build: ${BUILD_NUMBER}</p>
+        <div class="actions">
+            <a href="gitleaks-report.json">Open Raw JSON Report</a>
+        </div>
+        <h2>Summary</h2>
+        <ul>
+            <li>The JSON report is generated by Gitleaks with redacted findings.</li>
+            <li>The pipeline fails when Gitleaks exits with findings or scan errors.</li>
+            <li>Use the raw JSON report for exact rule IDs, file paths, and line numbers.</li>
+        </ul>
+    </div>
+</body>
+</html>
+EOF
+
+                            echo "${GITLEAKS_STATUS}" > ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
+                            echo "Gitleaks scan complete. Status=${GITLEAKS_STATUS}, findings=${FINDINGS_COUNT}"
+                            wc -c ${SECURITY_REPORT_DIR}/gitleaks-report.json ${SECURITY_REPORT_DIR}/gitleaks-report.html ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Scan Filesystem with Trivy') {
+            steps {
+                container('docker') {
+                    script {
+                        echo "Scanning application filesystem with Trivy..."
+                        sh '''
+                            mkdir -p ${SECURITY_REPORT_DIR}
+                            rm -f ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
+
+                            SCAN_CONTAINER="trivy-fs-${BUILD_NUMBER}"
+                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+
+                            docker create \
+                                --name "${SCAN_CONTAINER}" \
+                                -v trivy-fs-cache:/root/.cache/ \
+                                --entrypoint sh \
+                                aquasec/trivy:0.57.1 \
+                                -c 'sleep 300'
+
+                            docker cp cicd-reference-architectures/sample-application/. "${SCAN_CONTAINER}:/scan"
+                            docker start "${SCAN_CONTAINER}" >/dev/null
+
+                            set +e
+                            docker exec "${SCAN_CONTAINER}" trivy fs \
+                                --format json \
+                                --severity LOW,MEDIUM,HIGH,CRITICAL \
+                                --scanners vuln,secret,misconfig \
+                                --ignore-unfixed=false \
+                                --timeout 10m \
+                                --quiet \
+                                /scan \
+                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.json 2>/dev/null
+                            TRIVY_FS_JSON_STATUS=$?
+
+                            docker exec "${SCAN_CONTAINER}" trivy fs \
+                                --format template \
+                                --template '@/contrib/html.tpl' \
+                                --severity LOW,MEDIUM,HIGH,CRITICAL \
+                                --scanners vuln,secret,misconfig \
+                                --ignore-unfixed=false \
+                                --timeout 10m \
+                                --quiet \
+                                /scan \
+                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.html 2>/dev/null
+                            TRIVY_FS_HTML_STATUS=$?
+                            set -e
+
+                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+
+                            if [ "${TRIVY_FS_JSON_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.json ]; then
+                                echo '{}' > ${SECURITY_REPORT_DIR}/trivy-fs-report.json
+                            fi
+                            if [ "${TRIVY_FS_HTML_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.html ]; then
+                                cat > ${SECURITY_REPORT_DIR}/trivy-fs-report.html <<EOF
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Trivy Filesystem Report</title></head>
+<body><h1>Trivy Filesystem Report</h1><p>No filesystem report generated in this build.</p></body></html>
+EOF
+                            fi
+
+                            echo "Trivy filesystem scan complete. Report sizes:"
+                            wc -c ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Unit Tests & Code Coverage') {
             steps {
                 container('maven') {
@@ -397,180 +572,6 @@ EOF
             }
         }
 
-        stage('Scan Filesystem with Trivy') {
-            steps {
-                container('docker') {
-                    script {
-                        echo "Scanning application filesystem with Trivy..."
-                        sh '''
-                            mkdir -p ${SECURITY_REPORT_DIR}
-                            rm -f ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
-
-                            SCAN_CONTAINER="trivy-fs-${BUILD_NUMBER}"
-                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
-
-                            docker create \
-                                --name "${SCAN_CONTAINER}" \
-                                -v trivy-fs-cache:/root/.cache/ \
-                                --entrypoint sh \
-                                aquasec/trivy:0.57.1 \
-                                -c 'sleep 300'
-
-                            docker cp cicd-reference-architectures/sample-application/. "${SCAN_CONTAINER}:/scan"
-                            docker start "${SCAN_CONTAINER}" >/dev/null
-
-                            set +e
-                            docker exec "${SCAN_CONTAINER}" trivy fs \
-                                --format json \
-                                --severity LOW,MEDIUM,HIGH,CRITICAL \
-                                --scanners vuln,secret,misconfig \
-                                --ignore-unfixed=false \
-                                --timeout 10m \
-                                --quiet \
-                                /scan \
-                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.json 2>/dev/null
-                            TRIVY_FS_JSON_STATUS=$?
-
-                            docker exec "${SCAN_CONTAINER}" trivy fs \
-                                --format template \
-                                --template '@/contrib/html.tpl' \
-                                --severity LOW,MEDIUM,HIGH,CRITICAL \
-                                --scanners vuln,secret,misconfig \
-                                --ignore-unfixed=false \
-                                --timeout 10m \
-                                --quiet \
-                                /scan \
-                                > ${SECURITY_REPORT_DIR}/trivy-fs-report.html 2>/dev/null
-                            TRIVY_FS_HTML_STATUS=$?
-                            set -e
-
-                            docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
-
-                            if [ "${TRIVY_FS_JSON_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.json ]; then
-                                echo '{}' > ${SECURITY_REPORT_DIR}/trivy-fs-report.json
-                            fi
-                            if [ "${TRIVY_FS_HTML_STATUS}" -ne 0 ] || [ ! -s ${SECURITY_REPORT_DIR}/trivy-fs-report.html ]; then
-                                cat > ${SECURITY_REPORT_DIR}/trivy-fs-report.html <<EOF
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Trivy Filesystem Report</title></head>
-<body><h1>Trivy Filesystem Report</h1><p>No filesystem report generated in this build.</p></body></html>
-EOF
-                            fi
-
-                            echo "Trivy filesystem scan complete. Report sizes:"
-                            wc -c ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Scan Repository Secrets') {
-            steps {
-                container('maven') {
-                    script {
-                        echo "Scanning repository for secret leaks with Gitleaks..."
-                        sh '''
-                            mkdir -p ${SECURITY_REPORT_DIR} .tools
-                            rm -f ${SECURITY_REPORT_DIR}/gitleaks-report.json \
-                                  ${SECURITY_REPORT_DIR}/gitleaks-report.html \
-                                  ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
-
-                            GITLEAKS_ARCHIVE="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-                            GITLEAKS_URL="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${GITLEAKS_ARCHIVE}"
-
-                            if [ ! -x .tools/gitleaks ]; then
-                                echo "Downloading Gitleaks ${GITLEAKS_VERSION} from ${GITLEAKS_URL}"
-                                rm -f ".tools/${GITLEAKS_ARCHIVE}"
-                                curl --fail --location --retry 3 --retry-all-errors \
-                                    --connect-timeout 15 --max-time 180 --progress-bar \
-                                    "${GITLEAKS_URL}" \
-                                    --output ".tools/${GITLEAKS_ARCHIVE}"
-                                test -s ".tools/${GITLEAKS_ARCHIVE}"
-                                ls -lh ".tools/${GITLEAKS_ARCHIVE}"
-                                tar -xzf ".tools/${GITLEAKS_ARCHIVE}" -C .tools gitleaks
-                                chmod +x .tools/gitleaks
-                                ./.tools/gitleaks version
-                            fi
-
-                            set +e
-                            ./.tools/gitleaks dir . \
-                                --config cicd-reference-architectures/phase-1-image-build-jenkins/gitleaks.toml \
-                                --gitleaks-ignore-path cicd-reference-architectures/phase-1-image-build-jenkins/.gitleaksignore \
-                                --report-format json \
-                                --report-path ${SECURITY_REPORT_DIR}/gitleaks-report.json \
-                                --redact \
-                                --exit-code 1
-                            GITLEAKS_STATUS=$?
-                            set -e
-
-                            if [ ! -s ${SECURITY_REPORT_DIR}/gitleaks-report.json ]; then
-                                echo '[]' > ${SECURITY_REPORT_DIR}/gitleaks-report.json
-                            fi
-
-                            FINDINGS_COUNT=$(grep -o '"RuleID"' ${SECURITY_REPORT_DIR}/gitleaks-report.json | wc -l | tr -d ' ')
-                            if [ -z "${FINDINGS_COUNT}" ]; then
-                                FINDINGS_COUNT=0
-                            fi
-
-                            GITLEAKS_STATUS_CLASS=""
-                            if [ "${GITLEAKS_STATUS}" -eq 0 ]; then
-                                GITLEAKS_STATUS_TEXT="No secrets detected"
-                                GITLEAKS_STATUS_CLASS="clean"
-                            elif [ "${GITLEAKS_STATUS}" -eq 1 ]; then
-                                GITLEAKS_STATUS_TEXT="Secrets detected"
-                            else
-                                GITLEAKS_STATUS_TEXT="Gitleaks scan error"
-                                GITLEAKS_STATUS_CLASS="error"
-                            fi
-
-                                                        cat > ${SECURITY_REPORT_DIR}/gitleaks-report.html <<EOF
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gitleaks Secret Report</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: #f6f8fa; color: #24292f; margin: 0; padding: 32px; }
-        .panel { max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #d0d7de; border-radius: 8px; padding: 24px; }
-        .meta { margin-bottom: 16px; color: #57606a; }
-        .status { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; margin-bottom: 12px; background: #fff8c5; color: #9a6700; }
-        .status.clean { background: #dafbe1; color: #116329; }
-        .status.error { background: #ffebe9; color: #cf222e; }
-        .actions a { display: inline-block; padding: 8px 14px; border-radius: 6px; background: #1f6feb; color: #fff; text-decoration: none; font-size: 0.9rem; }
-        .actions a:hover { background: #1a5fb7; }
-        ul { color: #57606a; line-height: 1.6; }
-    </style>
-</head>
-<body>
-    <div class="panel">
-        <h1>Gitleaks Secret Report</h1>
-        <p class="meta">Repository: platform-engineering-reference-architectures</p>
-        <p class="status ${GITLEAKS_STATUS_CLASS}">${GITLEAKS_STATUS_TEXT}</p>
-        <p class="meta">Findings: ${FINDINGS_COUNT} &middot; Build: ${BUILD_NUMBER}</p>
-        <div class="actions">
-            <a href="gitleaks-report.json">Open Raw JSON Report</a>
-        </div>
-        <h2>Summary</h2>
-        <ul>
-            <li>The JSON report is generated by Gitleaks with redacted findings.</li>
-            <li>The pipeline fails when Gitleaks exits with findings or scan errors.</li>
-            <li>Use the raw JSON report for exact rule IDs, file paths, and line numbers.</li>
-        </ul>
-    </div>
-</body>
-</html>
-EOF
-
-                            echo "${GITLEAKS_STATUS}" > ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
-                            echo "Gitleaks scan complete. Status=${GITLEAKS_STATUS}, findings=${FINDINGS_COUNT}"
-                            wc -c ${SECURITY_REPORT_DIR}/gitleaks-report.json ${SECURITY_REPORT_DIR}/gitleaks-report.html ${SECURITY_REPORT_DIR}/gitleaks-exit-code.txt
-                        '''
-                    }
-                }
-            }
-        }
 
         stage('Commit Security Reports') {
             steps {

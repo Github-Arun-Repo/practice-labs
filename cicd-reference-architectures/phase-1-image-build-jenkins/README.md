@@ -100,6 +100,8 @@ Stages provide visual progress, isolated failure reporting ("failed at Stage 4")
 
 ```
 Checkout
+    -> Scan Repository Secrets with Gitleaks
+    -> Scan Filesystem with Trivy
     -> Unit Tests & Code Coverage
     -> SonarQube Analysis Placeholder (currently disabled)
     -> Build Application
@@ -107,8 +109,6 @@ Checkout
     -> Generate Image SBOM
     -> Scan SBOM with Grype
     -> Scan Docker Image with Trivy
-    -> Scan Filesystem with Trivy
-    -> Scan Repository Secrets with Gitleaks
     -> Commit Security Reports
     -> Enforce Security Gates
     -> Push to Registry
@@ -126,6 +126,8 @@ The order is deliberate. Each stage filters defects before they reach the next, 
 | Stage | Purpose in the current pipeline |
 |-------|-------------------------------|
 | Checkout | Pull the exact source revision |
+| Scan Repository Secrets | Detect committed credentials before doing any build work |
+| Scan Filesystem with Trivy | Run source and dependency-oriented checks before packaging or image creation |
 | Unit Tests & Code Coverage | Validate behavior and generate JaCoCo evidence |
 | SonarQube Placeholder | Reserved for source-level SAST and quality gates |
 | Build Application | Create the packaged Spring Boot JAR |
@@ -133,8 +135,6 @@ The order is deliberate. Each stage filters defects before they reach the next, 
 | Generate Image SBOM | Create CycloneDX, SPDX, and table SBOM outputs |
 | Scan SBOM with Grype | Evaluate package inventory for vulnerability risk |
 | Scan Docker Image | Evaluate runtime image layers for vulnerabilities |
-| Scan Filesystem | Evaluate source and build context for risks and misconfigurations |
-| Scan Repository Secrets | Detect committed credentials and tokens |
 | Commit Security Reports | Publish report evidence to Git and the dashboard |
 | Enforce Security Gates | Block promotion when gating policies fail |
 | Push to Registry | Publish the image only after gates pass |
@@ -142,7 +142,7 @@ The order is deliberate. Each stage filters defects before they reach the next, 
 | Attach SBOM | Attach CycloneDX SBOM as an OCI artifact |
 | Commit Cosign Evidence | Publish signing evidence to Git and the dashboard |
 
-**Design principle:** cheaper source-level failures stop the build before expensive artifact publication, while report evidence is still published before promotion so engineers can inspect what happened.
+**Design principle:** source-level checks such as secret detection and filesystem analysis should fail fast, before packaging and image creation, while report evidence is still published before promotion so engineers can inspect what happened.
 
 ---
 
