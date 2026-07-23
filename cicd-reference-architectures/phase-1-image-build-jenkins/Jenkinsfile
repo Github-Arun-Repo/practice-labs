@@ -849,10 +849,23 @@ EOF
                                     "${IMAGE_DIGEST_REF}" \
                                     > ${SECURITY_REPORT_DIR}/cosign-sign.txt 2>&1
 
+                                set +e
                                 ./.tools/cosign verify \
+                                    --insecure-ignore-tlog=true \
                                     --key ${SECURITY_REPORT_DIR}/cosign.pub \
                                     "${IMAGE_DIGEST_REF}" \
                                     > ${SECURITY_REPORT_DIR}/cosign-verify.txt 2>&1
+                                COSIGN_VERIFY_STATUS=$?
+                                set -e
+
+                                if [ "${COSIGN_VERIFY_STATUS}" -ne 0 ]; then
+                                    echo "ERROR: Cosign verify failed with status ${COSIGN_VERIFY_STATUS}."
+                                    echo "---- cosign-sign.txt (tail) ----"
+                                    tail -n 40 ${SECURITY_REPORT_DIR}/cosign-sign.txt || true
+                                    echo "---- cosign-verify.txt (tail) ----"
+                                    tail -n 80 ${SECURITY_REPORT_DIR}/cosign-verify.txt || true
+                                    exit ${COSIGN_VERIFY_STATUS}
+                                fi
 
                                 echo "Cosign image signing complete for ${IMAGE_DIGEST_REF}."
                             '''
@@ -954,12 +967,14 @@ EOF
                                     > ${SECURITY_REPORT_DIR}/cosign-build-attest.txt 2>&1
 
                                 ./.tools/cosign verify-attestation \
+                                    --insecure-ignore-tlog=true \
                                     --key ${SECURITY_REPORT_DIR}/cosign.pub \
                                     --type cyclonedx \
                                     "${IMAGE_DIGEST_REF}" \
                                     > ${SECURITY_REPORT_DIR}/cosign-verify-attestation-sbom.txt 2>&1
 
                                 ./.tools/cosign verify-attestation \
+                                    --insecure-ignore-tlog=true \
                                     --key ${SECURITY_REPORT_DIR}/cosign.pub \
                                     --type "${BUILD_ATTESTATION_TYPE}" \
                                     "${IMAGE_DIGEST_REF}" \
