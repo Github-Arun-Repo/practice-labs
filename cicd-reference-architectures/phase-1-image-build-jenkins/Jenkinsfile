@@ -28,6 +28,7 @@ pipeline {
         COSIGN_PASSWORD_CREDENTIALS_ID = 'cosign-password'
         SONARQUBE_SERVER = 'SonarQube'  // Configure in Jenkins
         ENABLE_SONARQUBE = 'false'
+        ENABLE_OWASP_LAST_STEP = 'false'
     }
 
     parameters {
@@ -165,29 +166,11 @@ EOF
             }
         }
 
-        stage('Dependency CVE Gate') {
-            steps {
-                container('maven') {
-                    script {
-                        echo "Running fail-fast dependency vulnerability gate (OWASP Dependency-Check)..."
-                        dir('cicd-reference-architectures/sample-application') {
-                            sh '''
-                                mvn -B org.owasp:dependency-check-maven:check \
-                                    -Dformat=HTML \
-                                    -Dformat=JSON \
-                                    -DfailBuildOnCVSS=7
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
         stage('Scan Filesystem with Trivy') {
             steps {
                 container('docker') {
                     script {
-                        echo "Scanning application filesystem with Trivy..."
+                        echo "Scanning application filesystem with Trivy (includes dependency vulnerabilities)..."
                         sh '''
                             mkdir -p ${SECURITY_REPORT_DIR}
                             rm -f ${SECURITY_REPORT_DIR}/trivy-fs-report.json ${SECURITY_REPORT_DIR}/trivy-fs-report.html
@@ -1244,6 +1227,27 @@ EOF
                     // This would typically update your ArgoCD git repo or deployment files
                     // For now, just logging the image reference
                     sh "echo 'Image built and pushed: ${IMAGE_NAME}:${IMAGE_TAG}'"
+                }
+            }
+        }
+
+        stage('OWASP Dependency Check (Last Step Optional)') {
+            when {
+                expression { return env.ENABLE_OWASP_LAST_STEP?.toBoolean() }
+            }
+            steps {
+                container('maven') {
+                    script {
+                        echo "Running OWASP Dependency-Check as optional last step..."
+                        dir('cicd-reference-architectures/sample-application') {
+                            sh '''
+                                mvn -B org.owasp:dependency-check-maven:check \
+                                    -Dformat=HTML \
+                                    -Dformat=JSON \
+                                    -DfailBuildOnCVSS=7
+                            '''
+                        }
+                    }
                 }
             }
         }
