@@ -69,7 +69,7 @@ flowchart LR
     trivyFs[04<br/>Filesystem Scan]
     tests[05<br/>Unit Tests]
     coverage[06<br/>Coverage]
-    sonar[07<br/>SonarQube Optional]
+    sonar[07<br/>SonarQube]
     package[08<br/>Package App]
     image[09<br/>Build Image]
     sbom[10<br/>Generate SBOM]
@@ -78,8 +78,8 @@ flowchart LR
     reportCommit[13<br/>Publish Report Evidence]
     gates[14<br/>Security Gates]
     registry[15<br/>Registry Push]
-    sign[16<br/>Cosign Sign Optional]
-    attest[17<br/>Cosign Attest Optional]
+    sign[16<br/>Cosign Sign (Default On)]
+    attest[17<br/>Cosign Attest (Default On)]
     attach[18<br/>Attach SBOM]
     cosignCommit[19<br/>Publish Cosign Evidence]
     evidence[20<br/>Evidence Dashboard]
@@ -202,7 +202,7 @@ Click any stage to inspect what it does, why it exists, and where it is useful.
 | 3 | [Scan Filesystem](#3-scan-filesystem) | Trivy fs | source/build context scan | reported |
 | 4 | [Unit Tests](#4-unit-tests) | Maven Surefire + JUnit | behavior validation | yes |
 | 5 | [Code Coverage](#5-code-coverage) | JaCoCo | coverage evidence | reported |
-| 6 | [SAST and Code Quality](#6-sast-and-code-quality) | SonarQube | source-level security and maintainability | optional / planned |
+| 6 | [SAST and Code Quality](#6-sast-and-code-quality) | SonarQube | source-level security and maintainability | yes |
 | 7 | [Package Application](#7-package-application) | Maven | build JAR artifact | yes |
 | 8 | [Build Container Image](#8-build-container-image) | Docker | immutable runtime artifact | yes |
 | 9 | [Generate SBOM](#9-generate-sbom) | Syft | package inventory | reported |
@@ -211,10 +211,10 @@ Click any stage to inspect what it does, why it exists, and where it is useful.
 | 12 | [Publish Report Evidence](#12-publish-report-evidence) | Jenkins + Git + HTML | public report publication before promotion | reported |
 | 13 | [Apply Security Gates](#13-apply-security-gates) | Jenkins policy logic | promotion decision | yes |
 | 14 | [Push to Registry](#14-push-to-registry) | Docker | artifact promotion | yes |
-| 15 | [Sign Image](#15-sign-image) | Cosign | digest integrity proof | optional |
-| 16 | [Attest Image](#16-attest-image) | Cosign | SBOM and build evidence referrers | optional |
+| 15 | [Sign Image](#15-sign-image) | Cosign | digest integrity proof | yes (default on) |
+| 16 | [Attest Image](#16-attest-image) | Cosign | SBOM and build evidence referrers | yes (default on) |
 | 17 | [Attach SBOM](#17-attach-sbom) | ORAS | OCI artifact attachment | best effort |
-| 18 | [Publish Cosign Evidence](#18-publish-cosign-evidence) | Jenkins + Git + HTML | public signing and attestation evidence | optional |
+| 18 | [Publish Cosign Evidence](#18-publish-cosign-evidence) | Jenkins + Git + HTML | public signing and attestation evidence | yes (default on) |
 
 ## 1. Source and Checkout
 

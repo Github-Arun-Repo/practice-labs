@@ -777,7 +777,7 @@ EOF
                                 echo "${PUSH_TAG_OUTPUT}"
                                 docker push ${IMAGE_NAME}:${LATEST_TAG}
 
-                                DIGEST=$(printf '%s\n' "${PUSH_TAG_OUTPUT}" | sed -n 's/^.*digest: \(sha256:[a-f0-9]\{64\}\).*$/\1/p' | head -n 1)
+                                DIGEST=$(printf '%s\n' "${PUSH_TAG_OUTPUT}" | grep -Eo 'sha256:[a-f0-9]{64}' | head -n 1)
                                 INSPECT_REF=$(docker image inspect ${IMAGE_NAME}:${IMAGE_TAG} --format '{{index .RepoDigests 0}}' 2>/dev/null || true)
 
                                 if [ -n "${INSPECT_REF}" ]; then

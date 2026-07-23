@@ -296,7 +296,7 @@
     <div class="pipeline-info">
         <h2>Jenkins CI Pipeline — Phase 1: Image Build</h2>
         <p style="font-size: 0.82rem; color: #57606a; margin-bottom: 14px;">
-            Ordered to match the current Jenkins stage execution. Optional stages are marked explicitly.
+            Ordered to match the current Jenkins stage execution. Cosign stages are enabled by default.
         </p>
         <div class="pipeline-steps">
             <span class="step">Checkout</span>
@@ -307,7 +307,7 @@
             <span class="arrow">→</span>
             <span class="step">Unit Tests &amp; Coverage</span>
             <span class="arrow">→</span>
-            <span class="step">SonarQube Optional</span>
+            <span class="step">SonarQube</span>
             <span class="arrow">→</span>
             <span class="step">Build App</span>
             <span class="arrow">→</span>
@@ -325,13 +325,13 @@
             <span class="arrow">→</span>
             <span class="step">Push</span>
             <span class="arrow">→</span>
-            <span class="step highlight">Cosign Sign Optional</span>
+            <span class="step highlight">Cosign Sign</span>
             <span class="arrow">→</span>
-            <span class="step highlight">Cosign Attest Optional</span>
+            <span class="step highlight">Cosign Attest</span>
             <span class="arrow">→</span>
             <span class="step">Attach SBOM</span>
             <span class="arrow">→</span>
-            <span class="step">Publish Cosign Evidence Optional</span>
+            <span class="step">Publish Cosign Evidence</span>
         </div>
     </div>
 
